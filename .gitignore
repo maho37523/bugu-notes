@@ -1,0 +1,29 @@
+# Local machine and generated state; historical APKs and design originals stay versioned.
+.DS_Store
+.engineering/
+**/build/
+**/.gradle/
+**/.kotlin/
+**/local.properties
+**/__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+.codex/
+.agents/
+.aws/
+
+# Credentials, signing material and real application data must never enter Git.
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*

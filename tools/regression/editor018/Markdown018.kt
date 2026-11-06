@@ -1,0 +1,71 @@
+package com.dspro.android.ui.notes
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import com.dspro.android.ui.MarkdownParser
+
+fun main() {
+    val raw = "# 标题\r\n\r\n```kotlin\n\n**raw code**\n```\n\n最后一段  "
+    val doc = NoteDocument(raw)
+    check(doc.readMarkdown() == raw)
+    check(doc.matches("标题") == listOf(raw.indexOf("标题")))
+    check(doc.matches("").isEmpty())
+    val start = doc.matches("最后").single()
+    doc.selectMatch(start, 2)
+    doc.replaceMatch(start, "最后", "末尾")
+    check(doc.readMarkdown().contains("末尾一段"))
+    doc.undo(); check(doc.readMarkdown() == raw)
+    doc.redo(); check(doc.readMarkdown().contains("末尾一段"))
+    doc.replaceMatch(0, "一段", "部分", all = true)
+    check(doc.readMarkdown().contains("末尾部分"))
+    doc.undo(); check(doc.readMarkdown().contains("末尾一段"))
+
+    val unicode = NoteDocument("İxİx")
+    check(unicode.matches("i") == listOf(0, 2))
+    unicode.replaceMatch(2, "i", "Q")
+    check(unicode.readMarkdown() == "İxQx")
+    unicode.undo(); check(unicode.readMarkdown() == "İxİx")
+    unicode.replaceMatch(0, "i", "Q", all = true)
+    check(unicode.readMarkdown() == "QxQx")
+    unicode.undo(); check(unicode.readMarkdown() == "İxİx")
+
+    val fenced = MarkdownParser.blocks("```\n\ncode\n```")
+    check((fenced.single { it is com.dspro.android.ui.MdBlock.Code } as com.dspro.android.ui.MdBlock.Code).text == "\ncode")
+    val indentedFence = MarkdownParser.blocks("    ```\n    text\n    ```")
+    check((indentedFence.single { it is com.dspro.android.ui.MdBlock.Code } as com.dspro.android.ui.MdBlock.Code).text == "```\ntext\n```")
+    val indented = MarkdownParser.blocks("    # not heading\n    - not list")
+    check(indented.single { it is com.dspro.android.ui.MdBlock.Code } is com.dspro.android.ui.MdBlock.Code)
+    val lineBreakPreview = MarkdownParser.blocks("第一行\n第二行\n\n\n第三段", preserveLineBreaks = true)
+    val firstParagraph = lineBreakPreview.filterIsInstance<com.dspro.android.ui.MdBlock.Paragraph>().first()
+    check(firstParagraph.text == "第一行\n第二行")
+    val gap = lineBreakPreview.filterIsInstance<com.dspro.android.ui.MdBlock.Gap>().single()
+    check(gap.count == 2)
+    val quoteLines = MarkdownParser.blocks("> 引用一\n> 引用二", preserveLineBreaks = true)
+        .filterIsInstance<com.dspro.android.ui.MdBlock.Quote>().single()
+    check(quoteLines.text == "引用一\n引用二")
+    val quoteBlankEdges = MarkdownParser.blocks("> \n> 中间\n> ", preserveLineBreaks = true)
+        .filterIsInstance<com.dspro.android.ui.MdBlock.Quote>().single()
+    check(quoteBlankEdges.text == "\n中间\n")
+    val emptyQuote = MarkdownParser.blocks("> ", preserveLineBreaks = true)
+        .filterIsInstance<com.dspro.android.ui.MdBlock.Quote>().single()
+    check(emptyQuote.text.isEmpty())
+    val actualBlankLines = MarkdownParser.blocks("段落\n\n# 标题", preserveLineBreaks = true)
+        .filterIsInstance<com.dspro.android.ui.MdBlock.Gap>().single()
+    check(actualBlankLines.count == 1)
+    val renderer = NoteLineRenderer(Color.Black, Color.White)
+    check(renderer.render(raw, 0).text == raw)
+    val editorLines = "# 标题\n- 无序项\n12. 编号项\n空行后\n\n换行中文"
+    val inactive = renderer.render(editorLines, -1)
+    val active = renderer.render(editorLines, 0)
+    val renderedLines = editorLines.replace("- ", "• ")
+    check(inactive.text.replace("\u200B", "") == renderedLines.replace("# ", ""))
+    check(active.text == renderedLines)
+    check(inactive.length == editorLines.length && active.length == editorLines.length)
+    check(inactive.spanStyles.none { it.item.fontSize?.value == 1f })
+    check(active.spanStyles.none { it.item.fontSize?.value == 1f })
+    check(renderer.render("- 列表\n  3. 子项", 0).text == "• 列表\n  3. 子项")
+    val nested = renderer.render("***嵌套***", 0)
+    check(nested.spanStyles.any { it.item.fontWeight != null && it.item.fontStyle != null })
+    println("PASS: raw Markdown round trip, leading fence blank, indented code classification, nested emphasis, find/replace selection and undo")
+}
