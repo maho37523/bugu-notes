@@ -1,6 +1,22 @@
 # 质量基线与验证
 
-状态：2026-11-06，本轮仅复核并完善文档，没有运行构建、回归、应用或迁移。本轮文档与资产检查见 [R00](exec-plans/R00-reboot-audit.md)；历史运行结果见 [v0.2.1 发布记录](15-bugu-notes-v0.2.1-release.md) 与 [M01](exec-plans/M01-design-assets.md)，不能替代完整质量基线。检查由 Codex 执行，用户不需要手动操作终端。
+状态：2026-11-06，已进入获准的工程基础实施。实际构建、Lint、回归及限制见 [R02](exec-plans/R02-quality-baseline.md)，自动入口见 [R04](exec-plans/R04-check-automation.md)。[R00](exec-plans/R00-reboot-audit.md)、[v0.2.1](15-bugu-notes-v0.2.1-release.md) 与 [M01](exec-plans/M01-design-assets.md) 保留各自时间/范围，不替代本次执行。检查由 Codex 执行，用户不需要手动操作终端。
+
+## 日常入口
+
+在项目根，由 Codex 执行（Git + Python 3.10+，只用标准库）：
+
+```sh
+python3 tools/check.py quick
+python3 -m unittest discover -s tools -p test_engineering_checks.py
+python3 tools/check.py baseline
+```
+
+quick 检查文档链接/锚点、变更文档空白、Git 工作差异和暂存差异、版本范围私密路径及 25 项设计校验。自检用合成资料验证失败确实会被拦住。baseline 先 quick，再检查已有离线环境、复制当前工作文件到新隔离副本，运行自检、构建/Lint 和下面六项回归；不复制 APK、真实数据、本机配置或旧 build，不安装依赖或启动应用。
+
+报告写 `.engineering/reports/<时间>/summary.json`、inputs.json 和逐项日志，包含起始提交、工作文件哈希、隔离路径、命令、退出码和时间。文件已修改但未提交时，以 inputs.json 为准确执行输入，不能只引用 HEAD。机器状态 passed/failed/not_run/blocked 分别对应通过/失败/未执行/环境受阻，非全部通过返回非零。环境前置受阻同样返回非零；quick 失败时直接报告，不创建完整基线报告。
+
+baseline 需要已有 JDK 21、SDK 35 / Build Tools 35.0.1、Gradle 8.9 离线分发及 ~/.gradle 缓存。当前默认使用既有 Mac 路径，可用 JAVA_HOME/ANDROID_HOME 指定已有工具；历史 runner 不支持其他 Gradle 缓存位置，入口会明确受阻。运行时可能需要工具权限写缓存锁；这不是允许安装新依赖。
 
 ## 文档验证
 
@@ -52,15 +68,15 @@
 | `bash tools/regression/editor018/run.sh` | 使用当前已编译编辑器/渲染类；原文往返、选区、撤销、Markdown、Unicode 和长文逻辑；不覆盖真实触摸/IME |
 | `bash tools/regression/network021/run.sh` | 离线配置迁移、供应商隔离、请求体、SSE 和搜索 fixtures；不证明线上连通 |
 | `python3 android/tools/regression/test_backup_zip_codec.py` | 实际 Java ZIP Codec 的往返、路径、重复条目及大小限制 |
-| `python3 android/tools/regression/test_room_migration_v6.py` | 历史补充入口，原意检查 5→6、后续迁移与草稿 SQL；当前兼容性需先复核，见下文 |
+| `python3 android/tools/regression/test_room_migration_v6.py` | 从当前 DDL 重建合成 v5，执行 5→8 SQL 并检查草稿删除、旧记录和 sources/queries 默认值；不是真实历史库或完整 1→8 |
 
-脚本位置见 [根回归目录](../tools/regression)、[Android 回归目录](../android/tools/regression)。[原回归 README](../tools/regression/README.md) 仍写 Room 7/v0.1.9；应结合本页与当前脚本阅读，不能按目录中的版本号判断实际覆盖。`backup018/`、`migration018.py` 保留为历史回归，不自动当作当前 schema 验收。
+脚本位置见 [根回归说明](../tools/regression/README.md)、[Android 回归目录](../android/tools/regression)。目录名中的历史版本不等于当前覆盖；`backup018/`、`migration018.py` 保留为历史回归，不自动当作当前 schema 验收。
 
-静态复核新发现：`test_room_migration_v6.py` 从当前生成 DDL 重建旧表时没有移除 schema 8 的 `sourcesJson`/`queriesJson`，但截取的后续迁移文本包含添加这两列的 SQL，存在重复列失败风险。此项未执行确认，本阶段不修改测试；后续先在隔离副本核实，不能把历史通过直接延续为当前通过。
+R02 已实际复现 `test_room_migration_v6.py` 的重复列失败，修复重建合成 v5 时未去除 schema 8 新列的问题，补充迁移默认值/旧记录断言，未改生产迁移或删除断言。lifecycle019 新增恢复中途 SQL 失败的数据/附件保留断言，已定向通过；限制见 [R03](exec-plans/R03-data-safety.md)。
 
 ## 自动化与版本保护的实施边界
 
-当前已有自动化回归脚本，但没有统一运行入口、CI、依赖锁定/校验、独立历史 schema 导出或 Git 回退基线。文档规则不等于这些机制已经实现。实施顺序见 [R01—R04](exec-plans/000-project-reboot.md)：先确认版本来源与保护范围，再复现既有检查、补足数据测试，最后用现有 Shell/Python/Gradle 建立最小检查入口。远端 CI 只在仓库和平台明确后考虑；不先引入测试平台、格式化框架或依赖升级。
+当前已有本地 Git 基线、保护归档恢复验证、统一检查入口和既有回归；没有远端 CI、依赖锁定/校验或独立历史 schema 导出。实施范围见 [R01—R04](exec-plans/000-project-reboot.md)。没有引入新依赖、格式化框架或工具链升级；远端和 CI 待平台明确后复用本地入口。
 
 ## 必须补齐的验收
 

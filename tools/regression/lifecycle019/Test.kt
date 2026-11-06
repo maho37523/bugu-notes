@@ -104,6 +104,24 @@ fun main(args:Array<String>) = runBlocking {
  }
  check(JSONObject(manifest).getJSONObject("data").getJSONArray("temporary_chat_drafts").length()==1)
  chats.clearTemporaryDraft(null)
+
+ // A real SQL error after restore has deleted/reinserted rows must roll back
+ // the whole database and discard staged files without touching old files.
+ val beforeCounts=JSONObject(manifest).getJSONObject("data").keys().asSequence().associateWith { count(it) }
+ val beforeNote=notes.getNote("named")
+ val beforeMessages=chats.loadMessages(committed.id)
+ val attachmentsDir=File(root,"attachments")
+ fun attachmentBytes()=attachmentsDir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(attachmentsDir).path to it.readBytes().toList() }
+ val beforeAttachments=attachmentBytes()
+ jdbc.execSQL("CREATE TRIGGER reject_restore BEFORE INSERT ON chat_messages BEGIN SELECT RAISE(ABORT,'forced restore failure'); END")
+ val restoreFailure=runCatching { backup.restore(Uri(archive.absolutePath)) }.exceptionOrNull()
+ jdbc.execSQL("DROP TRIGGER reject_restore")
+ check(restoreFailure!=null && generateSequence(restoreFailure) { it.cause }.any { it.message?.contains("forced restore failure")==true })
+ check(beforeCounts.all { (table, expected) -> count(table)==expected })
+ check(notes.getNote("named")==beforeNote && chats.loadMessages(committed.id)==beforeMessages)
+ check(chats.getTemporaryDraft(null)==null && attachmentBytes()==beforeAttachments)
+ println("PASS: forced restore SQL failure rolls back all table counts, preserves records and old attachments, and removes staged files")
+
  backup.restore(Uri(archive.absolutePath))
  check(chats.loadMessages(committed.id).first{it.id==102L}.let { it.sources.single().url=="https://example.org/a" && it.queries==listOf("测试问题") })
  val restored=chats.getTemporaryDraft(null)!!
@@ -128,7 +146,7 @@ fun main(args:Array<String>) = runBlocking {
  backup.restore(Uri(oldArchive.absolutePath))
  check(chats.getTemporaryDraft(null)==null && count("chat_sessions")==2)
  check(notes.getNote("named")?.title=="主动命名")
- println("PASS: actual v7 backup roundtrip remaps temporary/image paths and v0.1.8 schema6 backup restores compatibly")
+ println("PASS: schema8 backup roundtrip remaps temporary/image paths and synthetic schema7/schema6 backups restore compatibly")
  chats.trash(listOf(committed.id));chats.permanentlyDelete(listOf(committed.id));check(chats.loadSessions().none{it.id==committed.id});check(chats.loadMessages(committed.id).isEmpty())
  root.deleteRecursively();connection.close()
 }

@@ -1,5 +1,7 @@
 # 布谷笔记 · Android
 
+> 当前源码 v0.2.1 / 13。下方版本说明保留历史语境；新会话先读 [当前状态](../docs/current-state.md)、[质量规则](../docs/quality.md) 和 [实际基线](../docs/exec-plans/R02-quality-baseline.md)。工程验证由 Codex 在隔离副本执行，用户无需操作终端或用真实数据试启动。
+
 原生 Android 应用，包含笔记、对话、项目范围、Markdown 编辑和本地数据管理。
 
 技术栈：Kotlin、Jetpack Compose、Material 3、Room。`minSdk 26`、`targetSdk 35`。

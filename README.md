@@ -2,7 +2,7 @@
 
 > 工程文档入口（2026-11-06）：[协作约定](AGENTS.md) · [当前状态](docs/current-state.md) · [架构](ARCHITECTURE.md) · [产品范围](docs/product.md) · [资产登记](docs/assets.md) · [质量验证](docs/quality.md) · [决策](docs/decisions/README.md) · [重启计划](docs/exec-plans/000-project-reboot.md)。下方保留历史调研和交付说明；当前源码版本为 v0.2.1，勿将历史正文视为最新状态。
 
-> 新会话开工：[开发与交接规则](docs/workflow.md) · [任务索引](docs/exec-plans/README.md) · [本轮复核记录](docs/exec-plans/R00-reboot-audit.md)。当前仅进行工程文档工作，代码和版本保护实施尚待明确开启。
+> 新会话开工：[开发与交接规则](docs/workflow.md) · [任务索引](docs/exec-plans/README.md) · [版本保护](docs/exec-plans/R01-version-protection.md) · [实际质量验证](docs/exec-plans/R02-quality-baseline.md)。当前进行工程基础实施，不开发新功能；Codex 先运行 `python3 tools/check.py quick`，完整隔离验证使用 `python3 tools/check.py baseline`。
 
 > 调研基准日：2026-11-03　|　最新 Android 交付：布谷笔记 v0.2.0　|　范围：Android 手机优先
 
