@@ -13,7 +13,7 @@
 | UI / 网络 | Compose、Material 3、Flow；HttpURLConnection 和手工 SSE；v0.3.0 的 Claude 协议与安全配置为离线候选，设备及在线验收待完成；v0.4.0 目录树与内容归属代码已实现并通过离线构建/Lint，视觉设备验收待完成，详见 [实施任务](exec-plans/T-20261107-v040-implementation.md) |
 | 依赖来源 | [settings.gradle.kts](../android/settings.gradle.kts) 配置阿里云镜像及官方仓库；检查范围内未发现依赖锁定或校验元数据 |
 | Web | [prototype](../prototype/README.md)：独立无依赖交互演示，localStorage 与模拟输出；未发现 Node 包管理清单 |
-| Git | 本次已新建本地仓库 main，初始保护提交 8ea1938；根 .gitignore 排除本机/敏感/生成文件；无远端，未推送。原历史来源仍未确认，见 R01 |
+| Git | 本次已新建本地仓库 main，初始保护提交 8ea1938；根 .gitignore 排除本机/敏感/生成文件；2026-11-07 获用户明确授权后已公开至 GitHub `maho37523/bugu-notes`，origin 已建立、main 已推送、MIT 已识别；原历史来源仍未确认，见 R01 及 GitHub 上传任务 |
 | CI / 静态检查 | 已有 Android Lint、六项回归与新增 tools/check.py 本地入口；未引入 CI、Detekt 或 ktlint，见 [quality](quality.md) |
 
 ## 目录与文档口径
