@@ -23,7 +23,18 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
-data class ChatGptModel(val slug: String, val displayName: String)
+data class ChatGptModel(val slug: String, val displayName: String, val reasoningLevels: List<String>? = null)
+
+internal fun parseChatGptModel(row: JSONObject): ChatGptModel {
+    val slug = row.opt("slug") as? String ?: throw ChatGptProblem("ChatGPT 模型标识无效")
+    val name = row.opt("display_name") as? String ?: throw ChatGptProblem("ChatGPT 模型名称无效")
+    if (slug.isBlank() || name.isBlank() || slug.length > 200 || name.length > 200) throw ChatGptProblem("ChatGPT 模型目录无效")
+    val levels = row.optJSONArray("supported_reasoning_levels")?.let { array ->
+        if (array.length() > 20) throw ChatGptProblem("模型思考参数无效")
+        (0 until array.length()).mapNotNull { i -> array.optJSONObject(i)?.opt("effort") as? String }.distinct()
+    }
+    return ChatGptModel(slug, name, levels)
+}
 data class ChatGptAccountSummary(
     val id: String, val label: String, val email: String, val signedIn: Boolean,
     val planEnabled: Boolean, val models: List<ChatGptModel>, val needsWelcome: Boolean,
@@ -246,10 +257,7 @@ class ChatGptAccounts internal constructor(
         val rows = json.optJSONArray("models") ?: throw ChatGptProblem("ChatGPT 模型目录格式无效")
         if (rows.length() > 1000) throw ChatGptProblem("ChatGPT 模型目录过大")
         val models = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.opt("visibility") == "list" }.map {
-            val slug = it.opt("slug") as? String ?: throw ChatGptProblem("ChatGPT 模型标识无效")
-            val name = it.opt("display_name") as? String ?: throw ChatGptProblem("ChatGPT 模型名称无效")
-            if (slug.isBlank() || name.isBlank() || slug.length > 200 || name.length > 200) throw ChatGptProblem("ChatGPT 模型目录无效")
-            ChatGptModel(slug, name)
+            parseChatGptModel(it)
         }.distinctBy { it.slug }
         mutex.withLock {
             val latest = snapshot.accounts.find { it.id == id }

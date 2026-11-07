@@ -83,9 +83,8 @@ fun ChatScaffold(
     onMore: () -> Unit,
     model: String,
     provider: String,
-    onModelSelect: (String) -> Unit,
+    onOpenModelPicker: () -> Unit,
     effort: ThinkingEffort,
-    onEffortSelect: (ThinkingEffort) -> Unit,
     attachment: String?,
     onClearAttachment: () -> Unit,
     noteTitles: List<String>,
@@ -100,7 +99,6 @@ fun ChatScaffold(
     onBack: () -> Unit = {},
     busy: Boolean = false,
     modelDisplayName: String? = null,
-    chatGptAccountLabel: String = "",
     onManageUsage: () -> Unit = {},
 ) {
     val c = Dsh.colors
@@ -150,11 +148,9 @@ fun ChatScaffold(
             model = model,
             provider = provider,
             modelDisplayName = modelDisplayName,
-            chatGptAccountLabel = chatGptAccountLabel,
             onManageUsage = onManageUsage,
-            onModelSelect = onModelSelect,
+            onOpenModelPicker = onOpenModelPicker,
             effort = effort,
-            onEffortSelect = onEffortSelect,
             attachment = attachment,
             onClearAttachment = onClearAttachment,
             noteTitles = noteTitles,
@@ -579,9 +575,8 @@ private fun Composer(
     onAttach: () -> Unit,
     model: String,
     provider: String,
-    onModelSelect: (String) -> Unit,
+    onOpenModelPicker: () -> Unit,
     effort: ThinkingEffort,
-    onEffortSelect: (ThinkingEffort) -> Unit,
     attachment: String?,
     onClearAttachment: () -> Unit,
     noteTitles: List<String>,
@@ -593,7 +588,6 @@ private fun Composer(
     onConfigureApi: () -> Unit,
     busy: Boolean,
     modelDisplayName: String? = null,
-    chatGptAccountLabel: String = "",
     onManageUsage: () -> Unit = {},
 ) {
     val c = Dsh.colors
@@ -603,7 +597,6 @@ private fun Composer(
         "deepseek-v4-pro" -> "DeepSeek-V4-Pro"
         else -> model
     }
-    var modelMenu by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
         Surface(
             modifier = Modifier.widthIn(max = 880.dp).fillMaxWidth(),
@@ -616,7 +609,6 @@ private fun Composer(
                 if (provider == "chatgpt") Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("使用 ChatGPT 订阅", color = c.accent, fontSize = 11.sp)
-                        if (chatGptAccountLabel.isNotBlank()) Text(chatGptAccountLabel, color = c.muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     TextButton(onClick = onManageUsage) { Text("管理用量", fontSize = 11.sp) }
                 }
@@ -691,40 +683,17 @@ private fun Composer(
                     IconButton(onClick = onPickNote, enabled = !busy, modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Outlined.AlternateEmail, "引用笔记", Modifier.size(17.dp), tint = if (noteTitles.isNotEmpty()) c.accent else c.muted)
                     }
-                    Spacer(Modifier.weight(1f))
-                    Box {
+                    Box(Modifier.weight(1f)) {
                         Row(
                             Modifier.heightIn(min = 44.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .clickable(enabled = !busy) { modelMenu = true }
+                                .clickable(enabled = !busy && !isStreaming) { keyboard?.hide(); onOpenModelPicker() }
                                 .padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Text(if (provider == "deepseek") "DeepSeek · $modelLabel · ${effort.label}" else "${when (provider) { "openai" -> "OpenAI"; "chatgpt" -> "ChatGPT"; "anthropic" -> "Claude"; "aliyun" -> "阿里云百炼"; else -> "自定义" }} · $modelLabel", color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${com.dspro.android.data.providerLabel(provider)} · $modelLabel · ${effort.label}", modifier = Modifier.weight(1f), color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Icon(Icons.Outlined.ExpandMore, null, Modifier.size(12.dp), tint = c.subtle)
-                        }
-                        DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
-                            Text("模型", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                            if (provider == "deepseek") listOf(
-                                "deepseek-flash" to "DeepSeek-V4.1-Flash",
-                                "deepseek-v4-pro" to "DeepSeek-V4-Pro",
-                            ).forEach { (id, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(if (model == id) "✓  $label" else label) },
-                                    onClick = { onModelSelect(id) },
-                                )
-                            }
-                            if (provider == "deepseek") {
-                                HorizontalDivider()
-                                Text("思考强度", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                                ThinkingEffort.entries.forEach { level ->
-                                    DropdownMenuItem(
-                                        text = { Text(if (effort == level) "✓  ${level.label}" else level.label) },
-                                        onClick = { onEffortSelect(level); modelMenu = false },
-                                    )
-                                }
-                            } else DropdownMenuItem(text = { Text("更改服务商或模型") }, onClick = { modelMenu = false; onConfigureApi() })
                         }
                     }
                     Spacer(Modifier.width(6.dp))

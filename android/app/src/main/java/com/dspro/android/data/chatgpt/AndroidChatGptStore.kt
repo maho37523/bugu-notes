@@ -33,7 +33,7 @@ internal class AndroidChatGptStore(context: Context) : ChatGptStore {
                 idToken = row.getString("id_token"), accessToken = row.getString("access_token"), refreshToken = row.getString("refresh_token"),
                 scopes = (0 until scopes.length()).map { scopes.getString(it) }.toSet(),
                 expiresAt = row.optLong("expires_at"), earliestRefreshAt = row.optLong("earliest_refresh_at"),
-                models = (0 until models.length()).map { models.getJSONObject(it).let { m -> ChatGptModel(m.getString("slug"), m.getString("display_name")) } },
+                models = (0 until models.length()).map { models.getJSONObject(it).let { m -> parseChatGptModel(m) } },
                 welcomed = row.optBoolean("welcomed"), revoking = row.optBoolean("revoking"),
             ).also { require(it.id.isNotBlank() && it.clientId.isNotBlank() && it.clientId != "dynamic_agent_client" && it.subject.isNotBlank()) }
         }
@@ -51,7 +51,11 @@ internal class AndroidChatGptStore(context: Context) : ChatGptStore {
                     .put("id_token", account.idToken).put("access_token", account.accessToken).put("refresh_token", account.refreshToken)
                     .put("scopes", JSONArray(account.scopes.toList())).put("expires_at", account.expiresAt)
                     .put("earliest_refresh_at", account.earliestRefreshAt).put("welcomed", account.welcomed).put("revoking", account.revoking)
-                    .put("models", JSONArray().apply { account.models.forEach { put(JSONObject().put("slug", it.slug).put("display_name", it.displayName)) } }))
+                    .put("models", JSONArray().apply { account.models.forEach { put(JSONObject().put("slug", it.slug).put("display_name", it.displayName).apply {
+                        it.reasoningLevels?.let { levels -> put("supported_reasoning_levels", JSONArray().apply {
+                            levels.forEach { level -> put(JSONObject().put("effort", level)) }
+                        }) }
+                    }) } }))
             }
         })
         check(prefs.edit().putString("registrations", json.toString()).commit()) { "Secure credential persistence failed" }

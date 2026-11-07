@@ -74,11 +74,26 @@ fun main() {
     check(store.load("openai").apiKey == "preserved-synthetic-api-key")
     check(store.load("chatgpt").chatGptAccountId == "registration" && !store.load("chatgpt").isConfigured)
     check(!store.save(ApiConfig(provider = "chatgpt", apiKey = "synthetic-token-misuse")))
+    // Independent provider/model/account preferences, preserving existing credentials.
+    check(store.load("openai", "gpt-5.4-mini").effort == ThinkingEffort.Auto)
+    check(store.save(store.load("openai", "gpt-5.4-mini").copy(effort = ThinkingEffort.Medium)))
+    check(store.save(store.load("openai", "gpt-6.1-sol").copy(effort = ThinkingEffort.Max)))
+    check(store.load("openai", "gpt-5.4-mini").effort == ThinkingEffort.Medium)
+    check(store.load("openai", "gpt-6.1-sol").effort == ThinkingEffort.Max)
+    check(store.load("openai").apiKey == "preserved-synthetic-api-key")
+    check(store.load("deepseek").effort == ThinkingEffort.Low)
+    check(store.save(store.load("chatgpt", "catalog-model").copy(effort = ThinkingEffort.XHigh)))
+    check(store.load("chatgpt", "catalog-model").effort == ThinkingEffort.XHigh)
+    check(store.save(store.load("chatgpt").copy(chatGptAccountId = "different-registration", effort = ThinkingEffort.Auto)))
+    check(store.load("chatgpt", "catalog-model").effort == ThinkingEffort.Auto)
+    check(store.save(store.load("chatgpt").copy(chatGptAccountId = "registration", effort = ThinkingEffort.XHigh)))
+    check(store.load("chatgpt", "catalog-model", "registration").effort == ThinkingEffort.XHigh)
+    check(store.load("chatgpt", "catalog-model", "different-registration").effort == ThinkingEffort.Auto)
     val tokenPrefs = FakePrefs()
     SecurityFixture.byName["ds_chatgpt_secure"] = tokenPrefs
     val credentials = ChatGptCredential("registration", "Account", "issued-client", "subject", "fixture@example.invalid",
         "synthetic-id", "synthetic-access", "synthetic-refresh", CHATGPT_SCOPES.split(' ').toSet(), Long.MAX_VALUE,
-        models = listOf(ChatGptModel("catalog-model", "Catalog model")))
+        models = listOf(ChatGptModel("catalog-model", "Catalog model", listOf("low", "medium", "max"))))
     val tokenStore = AndroidChatGptStore(ctx)
     val snapshot = ChatGptSnapshot("urn:uuid:00000000-0000-4000-8000-000000000001", listOf(credentials))
     tokenStore.save(snapshot)

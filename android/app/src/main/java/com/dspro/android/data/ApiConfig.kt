@@ -6,7 +6,8 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 enum class ThinkingEffort(val apiValue: String, val label: String) {
-    None("none", "无"), Low("low", "低"), High("high", "高"), Max("max", "极高"),
+    Auto("", "模型默认"), None("none", "不思考"), Minimal("minimal", "最少"), Low("low", "低"),
+    Medium("medium", "中"), High("high", "高"), XHigh("xhigh", "很高"), Max("max", "极高"), Ultra("ultra", "最高"),
 }
 
 data class ApiConfig(
@@ -60,7 +61,7 @@ class ApiConfigStore(context: Context) {
         }.getOrNull()
     }
 
-    fun load(providerOverride: String? = null): ApiConfig = runCatching {
+    fun load(providerOverride: String? = null, modelOverride: String? = null, accountOverride: String? = null): ApiConfig = runCatching {
         val prefs = prefs ?: return ApiConfig(provider = providerOverride ?: "deepseek", secureStorageAvailable = false)
         val provider = providerOverride ?: (prefs.getString("provider", "deepseek") ?: "deepseek")
         if (provider == "deepseek") {
@@ -85,17 +86,23 @@ class ApiConfigStore(context: Context) {
             else -> "https://api.deepseek.com"
         }
         val defaultModel = when (provider) { "chatgpt" -> ""; "openai" -> "gpt-4o-mini"; "anthropic" -> "claude-sonnet-5-5"; "aliyun" -> "qwen-plus"; "custom" -> ""; else -> "deepseek-flash" }
+        val selectedModel = modelOverride ?: storedModel ?: if (provider == "deepseek") prefs.getString("model", defaultModel) ?: defaultModel else defaultModel
+        val accountId = if (provider == "chatgpt") accountOverride ?: prefs.getString("chatgpt_account_id", "").orEmpty() else ""
+        val effortKey = effortPreferenceKey(provider, selectedModel, accountId)
+        val storedEffort = prefs.getString(effortKey, null) ?: prefs.getString("${provider}_reasoning_effort", null)
         ApiConfig(
             apiKey = if (provider == "chatgpt") "" else key,
             baseUrl = storedBase ?: if (provider == "deepseek") prefs.getString("base_url", defaultBase) ?: defaultBase else defaultBase,
-            model = storedModel ?: if (provider == "deepseek") prefs.getString("model", defaultModel) ?: defaultModel else defaultModel,
-            effort = ThinkingEffort.entries.firstOrNull { it.apiValue == prefs.getString("reasoning_effort", null) }
-                ?: if (prefs.getBoolean("thinking", true)) ThinkingEffort.High else ThinkingEffort.None,
+            model = selectedModel,
+            effort = ThinkingEffort.entries.firstOrNull { it.apiValue == storedEffort }
+                ?: if (provider == "deepseek") ThinkingEffort.entries.firstOrNull { it.apiValue == prefs.getString("reasoning_effort", null) }
+                    ?: if (prefs.getBoolean("thinking", true)) ThinkingEffort.High else ThinkingEffort.None
+                else ThinkingEffort.Auto,
             provider = provider,
             webSearchEnabled = prefs.getBoolean("web_search_enabled", false),
             workspaceId = prefs.getString("${provider}_workspace_id", "") ?: "",
             trustedBaseUrl = prefs.getString("${provider}_trusted_base_url", "") ?: "",
-            chatGptAccountId = if (provider == "chatgpt") prefs.getString("chatgpt_account_id", "") ?: "" else "",
+            chatGptAccountId = accountId,
         )
     }.getOrElse { ApiConfig(provider = providerOverride ?: "deepseek", secureStorageAvailable = false) }
 
@@ -111,11 +118,12 @@ class ApiConfigStore(context: Context) {
             .putString("${config.provider}_model", next["${config.provider}_model"].toString())
             .putString("${config.provider}_workspace_id", next["${config.provider}_workspace_id"].toString())
             .putString("${config.provider}_trusted_base_url", config.trustedBaseUrl)
+            .putString(effortPreferenceKey(config.provider, config.model, config.chatGptAccountId), config.effort.apiValue)
             .apply {
                 if (config.provider == "chatgpt") putString("chatgpt_account_id", config.chatGptAccountId)
                 else {
                     putBoolean("web_search_enabled", config.webSearchEnabled)
-                    putString("reasoning_effort", config.effort.apiValue)
+                    if (config.provider == "deepseek") putString("reasoning_effort", config.effort.apiValue)
                 }
             }
             .commit()
@@ -135,3 +143,6 @@ class ApiConfigStore(context: Context) {
         }.commit()
     }.getOrDefault(false)
 }
+
+internal fun effortPreferenceKey(provider: String, model: String, accountId: String = "") =
+    "effort:$provider:${accountId.length}:$accountId:$model"

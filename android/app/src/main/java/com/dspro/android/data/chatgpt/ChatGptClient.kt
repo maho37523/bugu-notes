@@ -4,6 +4,7 @@ import com.dspro.android.data.ApiConfig
 import com.dspro.android.data.ChatClient
 import com.dspro.android.data.ChatTurn
 import com.dspro.android.data.StreamEvent
+import com.dspro.android.data.effectiveThinkingEffort
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.InternalCoroutinesApi
@@ -29,10 +30,13 @@ class ChatGptClient(private val accounts: ChatGptAccounts, private val config: A
         try {
             if (config.provider != "chatgpt" || config.apiKey.isNotEmpty()) throw ChatGptProblem("订阅连接配置无效，请重新选择 ChatGPT 账号")
             if (!accounts.configuration(config).isConfigured) throw ChatGptProblem("请先登录并授权使用 ChatGPT 订阅")
-            // Body validation runs before token refresh and before any inference request.
-            val body = buildChatGptRequest(config.model, turns)
+            // Reject unsupported input before token refresh or inference.
+            if (config.model.isBlank()) throw ChatGptProblem("请选择模型")
+            if (turns.any { it.imageBase64 != null }) throw ChatGptProblem("ChatGPT 订阅连接首版支持文本、笔记与文本附件，请先移除图片")
             val credential = accounts.credentialFor(config.chatGptAccountId)
-            if (credential.models.none { it.slug == config.model }) throw ChatGptProblem("此模型不在所选账号的目录中，请刷新模型后重新选择")
+            val model = credential.models.find { it.slug == config.model }
+                ?: throw ChatGptProblem("此模型不在所选账号的目录中，请刷新模型后重新选择")
+            val body = buildChatGptRequest(config.model, turns, effectiveThinkingEffort(config, model.reasoningLevels))
             val requestJob = currentCoroutineContext().job
             signOutHook = accounts.watchSignOut(credential.id) {
                 requestJob.cancel(CancellationException("ChatGPT 账号已退出"))

@@ -9,6 +9,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
+import com.dspro.android.data.ThinkingEffort
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -107,10 +108,10 @@ internal fun readChatGptBody(stream: InputStream): ByteArray {
     return result.toByteArray()
 }
 
-internal fun buildChatGptRequest(model: String, turns: List<ChatTurn>): JSONObject {
+internal fun buildChatGptRequest(model: String, turns: List<ChatTurn>, effort: ThinkingEffort = ThinkingEffort.Auto): JSONObject {
     require(model.isNotBlank())
     if (turns.any { it.imageBase64 != null }) throw ChatGptProblem("ChatGPT 订阅连接首版支持文本、笔记与文本附件，请先移除图片")
-    return JSONObject().put("model", model).put("store", false).put("stream", true).put("input", JSONArray().apply {
+    return JSONObject().apply { if (effort != ThinkingEffort.Auto) put("reasoning", JSONObject().put("effort", effort.apiValue)) }.put("model", model).put("store", false).put("stream", true).put("input", JSONArray().apply {
         turns.forEach { turn ->
             val role = when (turn.role) {
                 "system" -> "developer"

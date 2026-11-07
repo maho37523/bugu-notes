@@ -157,7 +157,9 @@ private suspend fun loginLifecycle() = coroutineScope {
                 s.soTimeout = 3000
                 val target = redirect.path + "?" + encodeForm(mapOf("state" to p.getValue("state"), "code" to "fixture-code", "client_id" to "issued-client"))
                 s.getOutputStream().write("GET $target HTTP/1.1\r\nHost: 127.0.0.1:${redirect.port}\r\n\r\n".toByteArray())
-                check(s.getInputStream().bufferedReader().readLine().contains("200"))
+                val page = s.getInputStream().bufferedReader().readText()
+                check(page.startsWith("HTTP/1.1 200") && page.contains("127.0.0.1") && page.contains("返回布谷笔记"))
+                check(!page.contains("fixture-code") && !page.contains(p.getValue("state")))
             }
         }
     }
@@ -247,14 +249,21 @@ private suspend fun protocolAndTransport() = coroutineScope {
     check(request.getJSONArray("input").getJSONObject(1).getString("role") == "user")
     for (field in listOf("messages", "temperature", "previous_response_id", "max_output_tokens", "tools")) check(!request.has(field))
     failure { buildChatGptRequest("model", listOf(ChatTurn("user", "picture", "fixture-base64"))) }
+    check(!request.has("reasoning"))
+    val effortRequest = buildChatGptRequest("catalog-model", listOf(ChatTurn("user", "question")), com.dspro.android.data.ThinkingEffort.Medium)
+    check(effortRequest.getJSONObject("reasoning").optString("effort") == "medium" && !effortRequest.has("reasoning_effort"))
+    val parsed = parseChatGptModel(JSONObject("""{"slug":"new-model","display_name":"New model","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"},{"effort":"xhigh"}]}"""))
+    check(parsed.reasoningLevels == listOf("low", "medium", "xhigh"))
+    check(parseChatGptModel(JSONObject("""{"slug":"old-model","display_name":"Old model"}""")).reasoningLevels == null)
     val complete = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
     val transport = Transport { Reply(text = complete) }
-    val service = ChatGptAccounts(seeded(account()), transport.http) { NOW }
-    val cfg = service.configuration(config())
+    val service = ChatGptAccounts(seeded(account().copy(models = listOf(ChatGptModel("model-a", "Model a", listOf("low", "medium", "high"))))), transport.http) { NOW }
+    val cfg = service.configuration(config().copy(effort = ThinkingEffort.Medium))
     val events = ChatGptClient(service, cfg).stream(listOf(ChatTurn("user", "question"))).toList()
     check(events == listOf(StreamEvent.Content("hello"), StreamEvent.Done))
     val conn = transport.connections.single()
     check(conn.url.toString() == "$CHATGPT_RESOURCE/responses" && conn.getRequestProperty("Authorization") == "Bearer access-a" && !conn.instanceFollowRedirects && conn.disconnected)
+    check(JSONObject(conn.sent.toString("UTF-8")).getJSONObject("reasoning").optString("effort") == "medium")
     val unknown = ChatGptClient(service, cfg.copy(model = "not-in-catalog")).stream(listOf(ChatTurn("user", "question"))).toList()
     check(unknown.single() is StreamEvent.Failure && transport.connections.size == 1)
     val wrong = ChatGptClient(service, cfg.copy(apiKey = "synthetic-api-key")).stream(listOf(ChatTurn("user", "question"))).toList()

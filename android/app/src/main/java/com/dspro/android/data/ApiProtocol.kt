@@ -52,9 +52,15 @@ internal fun buildChatRequestBody(config: ApiConfig, turns: List<ChatTurn>): JSO
             put(message)
         }
     })
-    if (config.provider == "deepseek") {
-        put("thinking", JSONObject().put("type", if (config.effort == ThinkingEffort.None) "disabled" else "enabled"))
-        put("reasoning_effort", config.effort.apiValue)
+    val effort = effectiveThinkingEffort(config)
+    if (config.provider == "deepseek" && effort != ThinkingEffort.Auto) {
+        put("thinking", JSONObject().put("type", if (effort == ThinkingEffort.None) "disabled" else "enabled"))
+        put("reasoning_effort", effort.apiValue)
+    }
+    if (config.provider == "openai" && effort != ThinkingEffort.Auto) put("reasoning_effort", effort.apiValue)
+    if (config.provider == "aliyun" && effort != ThinkingEffort.Auto) {
+        put("enable_thinking", effort != ThinkingEffort.None)
+        if (effort != ThinkingEffort.None) put("reasoning_effort", effort.apiValue)
     }
     if (config.provider == "openai" && config.model in setOf("gpt-5.4-mini", "gpt-5.4-mini-2026-03-17")) {
         put("max_completion_tokens", 4096)
@@ -87,7 +93,11 @@ internal fun buildClaudeRequestBody(config: ApiConfig, turns: List<ChatTurn>): J
     return JSONObject().put("model", config.model).put("max_tokens", 4096).put("stream", true)
         .put("messages", messages).apply {
             if (system.isNotBlank()) put("system", system)
-            if (config.model == "claude-sonnet-5-5") put("thinking", JSONObject().put("type", "between_tools"))
+            val effort = effectiveThinkingEffort(config)
+            if (effort != ThinkingEffort.Auto) {
+                put("thinking", JSONObject().put("type", "adaptive"))
+                put("output_config", JSONObject().put("effort", effort.apiValue))
+            } else if (config.model == "claude-sonnet-5-5") put("thinking", JSONObject().put("type", "between_tools"))
         }
 }
 

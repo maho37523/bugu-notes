@@ -18,6 +18,7 @@ cp_all="$run_dir/classes:$app_classes:$stdlib:$coroutines:$gson"
 source_dir=android/app/src/main/java/com/dspro/android/data/chatgpt
 "$java_dir/java" -cp "$compiler" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -no-reflect -Xfriend-paths="$app_classes" -classpath "$cp_all" -d "$run_dir/classes" \
+  android/app/src/main/java/com/dspro/android/data/ChatOptions.kt \
   "$source_dir/ChatGptOAuth.kt" "$source_dir/ChatGptProtocol.kt" "$source_dir/ChatGptAccounts.kt" "$source_dir/ChatGptClient.kt" \
   tools/regression/chatgpt/Test.kt
 "$java_dir/java" -cp "$cp_all" com.dspro.android.data.chatgpt.TestKt

@@ -19,6 +19,7 @@ mkdir -p "$run_dir/classes"
 cp_all="$run_dir/classes:$app_classes:$stdlib:$coroutines:$gson"
 "$java_dir/java" -cp "$compiler:$stdlib:$trove:$coroutines:$annotations" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -no-reflect -Xfriend-paths="$app_classes" -classpath "$cp_all" -d "$run_dir/classes" \
+  android/app/src/main/java/com/dspro/android/data/ChatOptions.kt \
   android/app/src/main/java/com/dspro/android/data/ApiProtocol.kt \
   android/app/src/main/java/com/dspro/android/data/DeepSeekClient.kt \
   android/app/src/main/java/com/dspro/android/data/DeepSeekSearchClient.kt \
@@ -30,6 +31,7 @@ mkdir -p "$run_dir/store-classes"
   tools/regression/network021/store_fixture/FakeAndroid.kt \
   tools/regression/network021/store_fixture/FakeSecurity.kt \
   android/app/src/main/java/com/dspro/android/data/ApiConfig.kt \
+  android/app/src/main/java/com/dspro/android/data/ChatOptions.kt \
   android/app/src/main/java/com/dspro/android/data/ApiProtocol.kt \
   android/app/src/main/java/com/dspro/android/data/chatgpt/AndroidChatGptStore.kt \
   tools/regression/network021/store_fixture/StoreTest.kt

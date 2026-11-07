@@ -31,8 +31,8 @@ public class JSONObject {
     public Object opt(String key) { return decode(json.get(key)); }
     public boolean isNull(String key) { return !json.has(key) || json.get(key).isJsonNull(); }
     public boolean has(String key) { return json.has(key); }
-    public JSONArray optJSONArray(String key) { try { return new JSONArray(json.getAsJsonArray(key)); } catch(Exception e) { return null; } }
-    public JSONObject optJSONObject(String key) { try { return new JSONObject(json.getAsJsonObject(key)); } catch(Exception e) { return null; } }
+    public JSONArray optJSONArray(String key) { try { JsonElement v=json.get(key); return v!=null && v.isJsonArray() ? new JSONArray(v.getAsJsonArray()) : null; } catch(Exception e) { return null; } }
+    public JSONObject optJSONObject(String key) { try { JsonElement v=json.get(key); return v!=null && v.isJsonObject() ? new JSONObject(v.getAsJsonObject()) : null; } catch(Exception e) { return null; } }
     public Object remove(String key) { return decode(json.remove(key)); }
     public Iterator<String> keys() { return json.keySet().iterator(); }
     public String optString(String key) { return optString(key,""); }

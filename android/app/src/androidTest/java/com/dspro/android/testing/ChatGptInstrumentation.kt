@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.os.Build
 import android.os.Bundle
+import com.dspro.android.data.ApiConfig
+import com.dspro.android.data.ThinkingEffort
 import com.dspro.android.data.ApiConfigStore
 import com.dspro.android.data.chatgpt.*
 import java.io.File
@@ -22,15 +24,23 @@ import org.json.JSONObject
 /** Framework-only runner: installed solely by the guarded disposable-AVD script. No JUnit dependency. */
 class ChatGptInstrumentation : Instrumentation() {
     private var syntheticAvd = ""
+    private var seedUi = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         syntheticAvd = arguments?.getString("synthetic_avd").orEmpty()
+        seedUi = arguments?.getString("seed_ui") == "true"
         start()
     }
     override fun onStart() {
         val result = Bundle()
         try {
             check(Build.HARDWARE in setOf("ranchu", "goldfish") && syntheticAvd.startsWith("BuguSmoke"))
+            if (seedUi) {
+                seedComposerFixture()
+                result.putString("stream", "PASS: synthetic composer fixture seeded; never send inference")
+                finish(Activity.RESULT_OK, result)
+                return
+            }
             loopback()
             crypto()
             secureStore()
@@ -40,6 +50,27 @@ class ChatGptInstrumentation : Instrumentation() {
             result.putString("stream", "FAIL: Android ChatGPT isolated instrumentation; no credentials logged")
             finish(Activity.RESULT_CANCELED, result)
         }
+    }
+    private fun seedComposerFixture() {
+        val store = AndroidChatGptStore(targetContext)
+        val original = store.load()
+        check(original.accounts.isEmpty())
+        val id = "composer-fixture-account"
+        store.save(ChatGptSnapshot(original.hostId.ifBlank { "urn:uuid:${UUID.randomUUID()}" }, listOf(
+            ChatGptCredential(id, "测试账号", "fixture-client", "fixture-subject", "private-fixture@example.invalid",
+                idToken = "synthetic-not-a-token", accessToken = "synthetic-never-send", scopes = setOf(CHATGPT_PLAN_SCOPE),
+                expiresAt = System.currentTimeMillis() + 86_400_000, welcomed = true,
+                models = listOf(ChatGptModel("fixture-fast", "测试快速模型", listOf("low", "medium", "high")),
+                    ChatGptModel("fixture-deep", "测试深思模型", listOf("high", "xhigh", "max")))))))
+        val api = ApiConfigStore(targetContext)
+        for ((provider, model, base) in listOf(
+            Triple("deepseek", "deepseek-flash", "https://api.deepseek.com"),
+            Triple("openai", "gpt-5.4-mini", "https://api.openai.com/v1"),
+            Triple("anthropic", "claude-sonnet-5-5", "https://api.anthropic.com/v1"),
+            Triple("aliyun", "qwen3.8-max", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            Triple("custom", "fixture-custom", "https://fixture.invalid/v1"),
+        )) check(api.save(ApiConfig(provider = provider, model = model, baseUrl = base, apiKey = "synthetic-never-send", effort = ThinkingEffort.Auto, trustedBaseUrl = base)))
+        check(api.save(ApiConfig(provider = "chatgpt", model = "fixture-fast", baseUrl = CHATGPT_RESOURCE, chatGptAccountId = id, effort = ThinkingEffort.Medium)))
     }
     private fun loopback() {
         OAuthAttempt("urn:uuid:${UUID.randomUUID()}").use { attempt ->

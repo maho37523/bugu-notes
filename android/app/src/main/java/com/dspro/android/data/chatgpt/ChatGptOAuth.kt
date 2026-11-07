@@ -120,7 +120,7 @@ internal class OAuthAttempt(
                     }
                     if (host != "127.0.0.1:${server.localPort}") throw InvalidCallback()
                     val code = consume(request[1])
-                    respond(it, 200, "登录已完成，请返回布谷笔记。")
+                    respond(it, 200, "授权结果已接收，请返回布谷笔记完成登录。")
                     return code
                 } catch (_: DeclinedConsent) {
                     respond(it, 200, "授权未完成，请返回布谷笔记。")
@@ -146,7 +146,12 @@ internal class OAuthAttempt(
 
     private fun respond(socket: Socket, status: Int, text: String) {
         runCatching {
-            val body = "<!doctype html><meta charset=utf-8><title>布谷笔记</title><p>$text</p>".toByteArray()
+            val body = ("<!doctype html><html lang=zh-CN><meta charset=utf-8>" +
+                "<meta name=viewport content='width=device-width,initial-scale=1'><title>返回布谷笔记</title>" +
+                "<style>body{font:18px system-ui;margin:48px 24px;line-height:1.7;color:#173e35}main{max-width:520px;margin:auto}</style>" +
+                "<main><h1>返回布谷笔记</h1><p>$text</p>" +
+                "<p>这是手机本机的登录交接页面（127.0.0.1），不是错误。请通过最近任务切回布谷笔记，应用会显示最终登录结果。</p>" +
+                "<p>可以关闭此浏览器页面。</p></main></html>").toByteArray()
             socket.getOutputStream().apply {
                 write(("HTTP/1.1 $status ${if (status == 200) "OK" else "Bad Request"}\r\n" +
                     "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n" +

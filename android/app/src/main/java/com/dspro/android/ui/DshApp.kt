@@ -116,6 +116,7 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
     val workspaceSearchService = appContainer.workspaceSearchService
     val notesViewModel: NotesViewModel = viewModel()
     var apiConfig by remember { mutableStateOf(appContainer.loadConfig()) }
+    var modelPickerConnections by remember { mutableStateOf<List<ComposerConnection>?>(null) }
     val chatGptState by appContainer.chatGptAccounts.state.collectAsStateWithLifecycle()
     LaunchedEffect(chatGptState) {
         if (apiConfig.provider == "chatgpt") apiConfig = appContainer.loadConfig("chatgpt")
@@ -1392,7 +1393,9 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                             clientFactory = appContainer::chatClient,
                             chatGptAccounts = appContainer.chatGptAccounts,
                             onSave = { cfg ->
-                                if (configStore.save(cfg)) {
+                                // Settings manages credentials, not composer reasoning preferences.
+                                val storedEffort = configStore.load(cfg.provider, cfg.model, cfg.chatGptAccountId).effort
+                                if (configStore.save(cfg.copy(effort = storedEffort))) {
                                     apiConfig = appContainer.loadConfig(cfg.provider)
                                     confirmedConnection = null
                                     screen = Screen.Settings
@@ -1594,22 +1597,14 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                             model = apiConfig.model,
                             provider = apiConfig.provider,
                             modelDisplayName = apiConfig.displayModel,
-                            chatGptAccountLabel = apiConfig.chatGptAccountLabel,
                             onManageUsage = {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/settings/usage"))) }
                                     .onFailure { toast("无法打开用量管理，请启用系统浏览器") }
                             },
-                            onModelSelect = { id ->
-                                val updated = apiConfig.copy(model = id)
-                                if (configStore.save(updated)) apiConfig = updated
-                                else { apiConfig = apiConfig.copy(apiKey = "", secureStorageAvailable = false); toast("安全存储不可用，模型设置未保存") }
+                            onOpenModelPicker = {
+                                modelPickerConnections = appContainer.composerConnections(apiConfig.provider)
                             },
-                            effort = apiConfig.effort,
-                            onEffortSelect = { level ->
-                                val updated = apiConfig.copy(effort = level)
-                                if (configStore.save(updated)) apiConfig = updated
-                                else { apiConfig = apiConfig.copy(apiKey = "", secureStorageAvailable = false); toast("安全存储不可用，设置未保存") }
-                            },
+                            effort = effectiveThinkingEffort(apiConfig, chatGptState.accounts.find { it.id == apiConfig.chatGptAccountId }?.models?.find { it.slug == apiConfig.model }?.reasoningLevels),
                             attachment = pendingAttachment?.name,
                             onClearAttachment = { if (!validatingNoteDraft && !workspaceBusy && !backupBusy) pendingAttachment = null },
                             noteTitles = pendingNotes.map { it.title },
@@ -1725,13 +1720,44 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
         }
     }
 
+    modelPickerConnections?.let { connections ->
+        ChatModelPicker(
+            connections = connections, currentProvider = apiConfig.provider,
+            onDismiss = { modelPickerConnections = null },
+            onRefreshModels = {
+                val selected = appContainer.loadConfig("chatgpt")
+                appContainer.chatGptAccounts.refreshModels(selected.chatGptAccountId)
+                appContainer.composerConnections(apiConfig.provider)
+            },
+            onConfigure = { modelPickerConnections = null; settingsBack = Screen.Chat; screen = Screen.Settings },
+            onApply = { provider, model, effort ->
+                val stored = configStore.load(provider, model)
+                val decorated = if (provider == "chatgpt") appContainer.chatGptAccounts.configuration(stored) else stored
+                val catalog = chatGptState.accounts.find { it.id == decorated.chatGptAccountId }?.models
+                if (isStreaming || validatingNoteDraft || workspaceBusy || backupBusy) {
+                    toast("请等待当前操作完成后再切换模型")
+                } else if (!decorated.isConfigured || (provider == "chatgpt" && catalog?.none { it.slug == model } != false)) {
+                    toast("此连接或模型已不可用，请重新配置")
+                } else {
+                    val advertised = catalog?.find { it.slug == model }?.reasoningLevels
+                    val updated = decorated.copy(effort = effort)
+                    if (effort !in supportedThinkingEfforts(provider, model, advertised)) toast("此模型不支持该思考强度")
+                    else if (configStore.save(updated)) {
+                        apiConfig = appContainer.loadConfig(provider)
+                        modelPickerConnections = null
+                    } else toast("安全存储不可用，连接设置未保存")
+                }
+            },
+        )
+    }
+
     if (pendingSendConfirmation || pendingRetryConfirmation != null) {
         val pendingConfig = confirmationConfig
         val retry = pendingRetryConfirmation
         AlertDialog(
             onDismissRequest = { pendingSendConfirmation = false; pendingRetryConfirmation = null },
             title = { Text(if (retry != null) "使用当前连接重新生成" else "确认发送资料") },
-            text = { Text("服务商：${pendingConfig?.provider.orEmpty()}\n模型：${pendingConfig?.model.orEmpty()}\n发送至：${pendingConfig?.baseUrl.orEmpty()}\n\n会发送此对话的相关历史、引用资料和项目上下文，${if (pendingConfig?.provider == "chatgpt") "使用所选账号的 ChatGPT 订阅额度，不会自动转用 API Key。账号：${pendingConfig.chatGptAccountLabel}。" else "并可能产生 API 费用。"}${if (retry != null) "原回答会保留。" else ""}") },
+            text = { Text("服务商：${pendingConfig?.provider.orEmpty()}\n模型：${pendingConfig?.model.orEmpty()}\n发送至：${pendingConfig?.baseUrl.orEmpty()}\n\n会发送此对话的相关历史、引用资料和项目上下文，${if (pendingConfig?.provider == "chatgpt") "使用所选账号的 ChatGPT 订阅额度，不会自动转用 API Key。" else "并可能产生 API 费用。"}${if (retry != null) "原回答会保留。" else ""}") },
             confirmButton = { TextButton(onClick = {
                 pendingSendConfirmation = false
                 pendingRetryConfirmation = null
