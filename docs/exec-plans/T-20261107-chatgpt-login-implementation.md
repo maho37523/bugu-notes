@@ -49,3 +49,5 @@ JVM RSA/回调/注册/刷新/退出/存储及 Responses fixture 已定向通过�
 交付 APK：`.engineering/apk/Bugu-Notes-v0.5.0-chatgpt-candidate-debug.apk`，29,370,011 字节，SHA256 `3e7cddc62a35fac904070f99ec5d9383228b4e6c5e2c964637f36a08ed12a7d7`。应用身份、升级签名与已修复 v0.4.0 相同，版本 0.5.0 / 16、minSdk26 / target35，数据库仍 schema9。真实手机保留已修复 v0.4.0，未触及真实账号、API Key、笔记或备份。
 
 剩余：真实浏览器 OAuth、账号/工作区资格、服务端模型目录与订阅推理，以及用户体验验收均未确认；开源并不保证所有账号均可授权。需先获得本候选安装/在线验收授权。仅候选开发分支，不合并 main 或发布正式 Release；本分支回退至 71d1afe 不影响 main 与手机。模拟器将在交付前停止，检查/构建进程均已结束；本聊天结束后释放写入。
+
+开发提交 `3e6e03f` 已上传；草稿 [PR #1](https://github.com/maho37523/bugu-notes/pull/1) 以 main 为目标，未合并。两台测试 AVD 均已停止。本轮只剩真实安装/账号/在线验收等待用户授权，交付文档完成后停止写入。
