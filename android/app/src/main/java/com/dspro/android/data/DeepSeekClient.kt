@@ -23,15 +23,26 @@ sealed interface StreamEvent {
     data object Done : StreamEvent
 }
 
-class DeepSeekClient(private val config: ApiConfig) {
+class DeepSeekClient(
+    private val config: ApiConfig,
+    private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+) {
 
     @OptIn(InternalCoroutinesApi::class)
     fun stream(turns: List<ChatTurn>): Flow<StreamEvent> = flow {
-        if (config.apiKey.isBlank()) {
-            emit(StreamEvent.Failure("还没有填写 API Key"))
+        requestConfigError(config)?.let {
+            emit(StreamEvent.Failure(it))
             return@flow
         }
-        val body = buildChatRequestBody(config, turns)
+        val body = try {
+            turns.forEach { turn -> turn.imageBase64?.let { image ->
+                imageRequestError(config, turn.imageMime ?: "", image.length)?.let { error(it) }
+            } }
+            if (config.provider == "anthropic") buildClaudeRequestBody(config, turns) else buildChatRequestBody(config, turns)
+        } catch (_: Exception) {
+            emit(StreamEvent.Failure("消息或图片不符合当前模型的要求"))
+            return@flow
+        }
 
         var connection: HttpURLConnection? = null
         val activeConnection = AtomicReference<HttpURLConnection?>(null)
@@ -39,17 +50,22 @@ class DeepSeekClient(private val config: ApiConfig) {
             if (cause is CancellationException) activeConnection.getAndSet(null)?.disconnect()
         }
         try {
-            connection = (URL(config.endpoint).openConnection() as HttpURLConnection).apply {
+            connection = openConnection(URL(config.endpoint)).apply {
                 requestMethod = "POST"
                 connectTimeout = 15_000
                 readTimeout = 180_000
                 doOutput = true
                 useCaches = false
+                instanceFollowRedirects = false
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "text/event-stream")
                 setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("Connection", "keep-alive")
                 setRequestProperty("Authorization", "Bearer ${config.apiKey}")
+                if (config.provider == "anthropic") {
+                    setRequestProperty("anthropic-version", "2026-10-21")
+                    if (config.workspaceId.isNotBlank()) setRequestProperty("anthropic-workspace-id", config.workspaceId.trim())
+                }
             }
             activeConnection.set(connection)
             currentCoroutineContext().ensureActive()
@@ -57,52 +73,52 @@ class DeepSeekClient(private val config: ApiConfig) {
 
             val code = connection.responseCode
             if (code !in 200..299) {
-                val errorStream = connection.errorStream
-                val errorText = if (errorStream != null) {
-                    errorStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } else ""
-                emit(StreamEvent.Failure(parseError(code, errorText)))
+                emit(StreamEvent.Failure(parseError(code)))
                 return@flow
             }
 
             val reader = connection.inputStream.bufferedReader(Charsets.UTF_8)
+            val decoder = ChatStreamDecoder(config.provider == "anthropic")
             reader.use { buffered ->
-                var line: String? = buffered.readLine()
-                while (line != null) {
-                    val trimmed = line.trim()
-                    if (trimmed.startsWith("data:")) {
-                        val data = trimmed.removePrefix("data:").trim()
-                        if (data == "[DONE]") break
+                val data = mutableListOf<String>()
+                while (true) {
+                    val line = buffered.readLine() ?: break
+                    if (line.isEmpty()) {
                         if (data.isNotEmpty()) {
-                            parseChatSseChunk(data).forEach { emit(it) }
+                            val frame = data.joinToString("\n")
+                            if (frame.isNotBlank()) decoder.accept(frame).forEach { emit(it) }
+                            data.clear()
+                            if (decoder.isFinished) break
                         }
+                    } else if (line.startsWith("data:")) {
+                        val value = line.substring(5)
+                        data.add(if (value.startsWith(" ")) value.substring(1) else value)
                     }
-                    line = buffered.readLine()
                 }
+                if (data.isNotEmpty()) {
+                    val frame = data.joinToString("\n")
+                    if (frame.isNotBlank()) decoder.accept(frame).forEach { emit(it) }
+                }
+                decoder.endOfInput().forEach { emit(it) }
             }
-            emit(StreamEvent.Done)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
-            emit(StreamEvent.Failure(e.message ?: "网络请求失败"))
+            emit(StreamEvent.Failure("网络请求失败，请检查连接后重试"))
         } finally {
             cancelHook.dispose()
             activeConnection.getAndSet(null)?.disconnect()
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun parseError(code: Int, raw: String): String {
-        val message = try {
-            JSONObject(raw).optJSONObject("error")?.optString("message")
-        } catch (_: Exception) {
-            null
-        }
+    private fun parseError(code: Int): String {
         return when (code) {
             401 -> "API Key 无效，请检查后重试"
+            403 -> "当前账号无权访问该服务或模型"
             402 -> "账户余额不足，请先充值"
             429 -> "请求太频繁，请稍后再试"
-            else -> message?.takeIf { it.isNotBlank() } ?: "请求失败（HTTP $code）"
+            else -> "请求失败（HTTP $code）"
         }
     }
 }

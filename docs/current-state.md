@@ -6,11 +6,11 @@
 
 | 项目 | 当前证据 |
 | --- | --- |
-| 版本 | [app/build.gradle.kts](../android/app/build.gradle.kts)：0.2.1 / versionCode 13，applicationId `com.dspro.android` |
+| 版本 | [app/build.gradle.kts](../android/app/build.gradle.kts)：0.4.0 / versionCode 15（开发中，未完成本轮离线/设备验收），applicationId `com.dspro.android`；v0.3.0 / 14 有已完成的离线候选记录，设备及在线仍待验收 |
 | 工具链 | [根构建](../android/build.gradle.kts)：AGP 8.7.3、Kotlin/Compose 插件 2.0.21、KSP 2.0.21-1.0.28；[Wrapper](../android/gradle/wrapper/gradle-wrapper.properties)：Gradle 8.9 |
 | SDK / JVM | minSdk 26、compileSdk/targetSdk 35、Build Tools 35.0.1；源码及字节码目标 17，既有构建文档使用 JDK 21 |
-| 存储 | [NotesDatabase](../android/app/src/main/java/com/dspro/android/data/notes/NotesDatabase.kt)：Room 2.6.1、schema 8、13 个实体，迁移 1→8 |
-| UI / 网络 | Compose、Material 3、Flow；HttpURLConnection 和手工 SSE；详见 [架构](../ARCHITECTURE.md) |
+| 存储 | [NotesDatabase](../android/app/src/main/java/com/dspro/android/data/notes/NotesDatabase.kt)：Room 2.6.1、schema 9、13 个实体，迁移 1→9；v0.4.0 schema 8→9 与 v6/7/8 旧备份转换已通过本机离线合成回归，设备/真实数据尚未验证 |
+| UI / 网络 | Compose、Material 3、Flow；HttpURLConnection 和手工 SSE；v0.3.0 的 Claude 协议与安全配置为离线候选，设备及在线验收待完成；v0.4.0 目录树与内容归属代码已实现并通过离线构建/Lint，视觉设备验收待完成，详见 [实施任务](exec-plans/T-20261107-v040-implementation.md) |
 | 依赖来源 | [settings.gradle.kts](../android/settings.gradle.kts) 配置阿里云镜像及官方仓库；检查范围内未发现依赖锁定或校验元数据 |
 | Web | [prototype](../prototype/README.md)：独立无依赖交互演示，localStorage 与模拟输出；未发现 Node 包管理清单 |
 | Git | 本次已新建本地仓库 main，初始保护提交 8ea1938；根 .gitignore 排除本机/敏感/生成文件；无远端，未推送。原历史来源仍未确认，见 R01 |
@@ -30,12 +30,13 @@
 - 既有 [M01](exec-plans/M01-design-assets.md) 通过记录仍是历史证据，临时产物不是长期基线。
 - R01 归档并隔离恢复核对 169 项内容和权限，建立本地 Git；原件保留，未读取真实凭据、本机配置内容或私钥。保护归档只在本机，不是异地或用户数据备份。
 - R02 在全新隔离副本实际构建/Lint通过；原始六回归中五项通过，历史 v6 测试夹具复现 schema 8 重复列错误，最小修复后通过。最终统一入口另建全新副本：构建 44.88 秒、48 任务、0 errors / 4 warnings，六项回归及工具 10 项自检全部通过，精确证据见 R02/R04。
+- v0.4.0 在新隔离副本通过 schema 8→9 Room 迁移、schema 8/7/6 备份转换、scope/目录树 Repository 回归及原有五类回归；最新完整报告见 [实施任务](exec-plans/T-20261107-v040-implementation.md)。这只覆盖合成 JDBC/ZIP 输入和离线构建，不是 Android 设备或真实历史数据验收。
 - 25 项设计哈希通过。新增 [R03 离线恢复失败回归](exec-plans/R03-data-safety.md) 已定向通过，数据库/旧附件保持、暂存文件清理有合成测试证据；不代表真实设备、真实历史库或完整迁移验证。
-- 本次未安装或启动应用，未操作真实数据库，未做真实 API/搜索在线、触摸/IME 或进程恢复验证。
+- 工程基础阶段未安装或启动应用。2026-11-07 [启动故障任务](exec-plans/T-20261107-v040-startup-crash.md) 后续通过 USB 日志定位旧临时草稿悬空 folderId 导致迁移闪退；SQL 升级读取仅将该失效引用归 null，保留草稿与附件，ZIP/v9 严格验证不变。原包合成复现失败、修复后 Android 15/17 同类升级及完整 baseline 通过；获用户明确批准、私有备份并校验后，在 OPPO Android 17 覆盖安装修复包并确认启动存活、首页前台、无新增崩溃。真实内容逐条一致性由用户验收；未做在线 API、中文 IME 或全部历史链验证。
 
 ## 工程体系落地程度
 
-[AGENTS](../AGENTS.md)、[会话规则](workflow.md)、[任务索引](exec-plans/README.md) 和 [重启计划](exec-plans/000-project-reboot.md) 定义开工/验收/交接；本地版本保护与 [检查入口](../tools/check.py) 已建立且集成验证通过，见 [R04](exec-plans/R04-check-automation.md)。本次工程基础范围完成，不开发新功能或改架构。CI、异地备份、完整历史升级和设备验收尚未建立，不声称完整长期可靠性已验证。
+[AGENTS](../AGENTS.md)、[会话规则](workflow.md)、[任务索引](exec-plans/README.md) 和 [重启计划](exec-plans/000-project-reboot.md) 定义开工/验收/交接；本地版本保护与 [检查入口](../tools/check.py) 已建立且集成验证通过，见 [R04](exec-plans/R04-check-automation.md)。工程基础阶段已完成；用户已另行开启 v0.3.0 业务开发，实际进度见实施任务。CI、异地备份、完整历史升级和设备验收尚未建立，不声称完整长期可靠性已验证。
 
 ## 风险与未知事项
 
@@ -43,7 +44,7 @@
 | --- | --- |
 | 启动清理数据 | [DsApplication](../android/app/src/main/java/com/dspro/android/DsApplication.kt) 清理超过 30 天的笔记回收站 |
 | 恢复替换数据 | [BackupService](../android/app/src/main/java/com/dspro/android/data/notes/BackupService.kt) 替换业务表，提交后清理旧附件 |
-| 凭据明文回退 | [ApiConfig](../android/app/src/main/java/com/dspro/android/data/ApiConfig.kt) 加密初始化失败使用普通偏好；[Manifest](../android/app/src/main/AndroidManifest.xml) 为 allowBackup=true，系统备份实际行为未确认 |
+| 凭据与系统备份 | v0.3.0 代码中加密失败停止凭据读取及请求，并为凭据偏好配置系统备份排除；Keystore 故障及备份/设备迁移的真机行为仍未确认，既有明文回退文件不会自动删除 |
 | 关系与删除 | [实体](../android/app/src/main/java/com/dspro/android/data/notes/NotesEntities.kt) 未声明外键；笔记永久删除多步操作未统一事务，附件清理一致性待验证 |
 | 双链歧义 | [NotesRepository](../android/app/src/main/java/com/dspro/android/data/notes/NotesRepository.kt) refreshLinks 使用全局按标题查找，与项目内查找口径不同；同名、改名一致性待验证 |
 | 测试复现 | 本机隔离构建已复现，入口依赖 JDK/SDK/离线缓存；完整 1→8、真实历史库、进程死亡、IME、磁盘耗尽及设备性能未确认 |

@@ -75,6 +75,32 @@ class Guardrails(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Private/generated'):
                 check.project_files(self.root)
 
+    def test_only_project_skill_instructions_and_metadata_are_allowed(self):
+        for skill in ['intake', 'feature', 'bugfix', 'review', 'research']:
+            for leaf in ['SKILL.md', 'agents/openai.yaml']:
+                name = f'.agents/skills/{skill}/{leaf}'
+                self.write(name, 'synthetic\n')
+                with patch('check.git', return_value=name.encode() + b'\0'):
+                    self.assertEqual(check.project_files(self.root), [name])
+        for name in ['.agents/private', '.agents/skills/other/SKILL.md',
+                     '.agents/skills/research/.env', '.agents/skills/research/user.db',
+                     '.agents/skills/research/agents/secrets.yaml',
+                     '.agents/skills/intake/.env', '.agents/skills/intake/user.db',
+                     '.agents/skills/intake/agents/secrets.yaml',
+                     '.agents/skills/intake/references/SKILL.md',
+                     'nested/.agents/skills/intake/SKILL.md',
+                     '.agents/skills/intake/../feature/SKILL.md',
+                     '.codex/skills/intake/SKILL.md']:
+            with patch('check.git', return_value=name.encode() + b'\0'):
+                with self.assertRaisesRegex(ValueError, 'Private/generated'):
+                    check.project_files(self.root)
+        link = self.root / '.agents/skills/intake/SKILL.md'
+        link.unlink()
+        link.symlink_to(self.write('outside.md', 'synthetic\n'))
+        with patch('check.git', return_value=b'.agents/skills/intake/SKILL.md\0'):
+            with self.assertRaisesRegex(ValueError, 'Symlink/outside'):
+                check.project_files(self.root)
+
     def test_missing_offline_distribution_cannot_pass(self):
         for name in ['jdk/bin/java', 'jdk/bin/javac', 'sdk/platforms/android-35/android.jar']:
             self.write(name, 'synthetic')

@@ -100,7 +100,6 @@ fun NoteEditorScreen(
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     val saveLock = remember(noteId) { Mutex() }
-    val folders by repository.folders.collectAsStateWithLifecycle(initialValue = emptyList())
     val allTags by repository.tags.collectAsStateWithLifecycle(initialValue = emptyList())
     val revisions by repository.observeRevisions(noteId).collectAsStateWithLifecycle(initialValue = emptyList())
 
@@ -111,6 +110,7 @@ fun NoteEditorScreen(
     }
     var folderId by remember(noteId, newDraft, newDraftState) { mutableStateOf(if (newDraftState != null) newDraftState.folderId else newDraft?.folderId) }
     var projectId by remember(noteId, newDraft, newDraftState) { mutableStateOf(if (newDraftState != null) newDraftState.projectId else newDraft?.projectId) }
+    val folders by remember(projectId) { repository.observeFolders(projectId) }.collectAsStateWithLifecycle(initialValue = emptyList())
     var pinned by remember(noteId, newDraft, newDraftState) { mutableStateOf(newDraftState?.pinned ?: newDraft?.pinned ?: false) }
     var selectedTagIds by remember(noteId) { mutableStateOf<List<String>>(emptyList()) }
     val loaded = document != null
@@ -447,7 +447,7 @@ fun NoteEditorScreen(
                 TextButton(onClick = {
                     if (newFolderName.isNotBlank()) {
                         scope.launch {
-                            val folder = repository.createFolder(newFolderName.trim())
+                            val folder = repository.createFolder(newFolderName.trim(), projectId)
                             folderId = folder.id
                             newFolderName = ""
                             showNewFolder = false

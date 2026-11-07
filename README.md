@@ -1,8 +1,33 @@
-# DeepSeek Android 原型：调研与产品定义
+# 布谷笔记（Bugu Notes）
 
-> 工程文档入口（2026-11-06）：[协作约定](AGENTS.md) · [当前状态](docs/current-state.md) · [架构](ARCHITECTURE.md) · [产品范围](docs/product.md) · [资产登记](docs/assets.md) · [质量验证](docs/quality.md) · [决策](docs/decisions/README.md) · [重启计划](docs/exec-plans/000-project-reboot.md)。下方保留历史调研和交付说明；当前源码版本为 v0.2.1，勿将历史正文视为最新状态。
+本地优先的 Android 笔记与 AI 对话应用，使用 Kotlin、Jetpack Compose 和 Room。支持 Markdown 笔记、项目与嵌套目录、对话草稿、引用上下文，以及业务备份与恢复。
 
-> 新会话开工：[开发与交接规则](docs/workflow.md) · [任务索引](docs/exec-plans/README.md) · [版本保护](docs/exec-plans/R01-version-protection.md) · [实际质量验证](docs/exec-plans/R02-quality-baseline.md)。当前进行工程基础实施，不开发新功能；Codex 先运行 `python3 tools/check.py quick`，完整隔离验证使用 `python3 tools/check.py baseline`。
+当前源码：**v0.4.0 / versionCode 15**，包含旧临时草稿目录引用导致启动闪退的兼容修复。Android 15/17 的合成数据新安装、覆盖升级和冷启动验证通过，用户授权的 OPPO Android 17 启动验证通过；不代表全部设备、真实历史数据或在线模型均已验收。详见 [修复记录](docs/exec-plans/T-20261107-v040-startup-crash.md)。
+
+现有 AI 接入使用用户自行配置的厂商 API 凭据。**ChatGPT 订阅登录尚未实现**，作为后续版本开发；官方路径及限制见 [研究记录](docs/exec-plans/T-20261107-openai-subscription-research.md)。
+
+## 构建与验证
+
+Android 工程位于 `android/`。现有工具链为 JDK 21、Android SDK 35 / Build Tools 35.0.1、Gradle 8.9；应用 minSdk 26、targetSdk 35，Kotlin/Java 字节码目标 17。使用自己的 Android SDK 配置，不提交 `local.properties` 或签名私钥。
+
+```sh
+cd android
+./gradlew :app:assembleDebug :app:lintDebug
+```
+
+本项目日常检查入口为 `python3 tools/check.py quick`；已有离线环境下的完整隔离检查为 `python3 tools/check.py baseline`。部分回归入口仍依赖既有 Mac 路径和离线缓存，可执行范围与限制见 [质量规则](docs/quality.md) 和 [回归说明](tools/regression/README.md)。源码仓库不包含用户笔记、API 凭据或本机回退备份。仓库中保留的旧 APK 是历史归档，不是本次修复交付包。
+
+## 工程文档
+
+[当前状态](docs/current-state.md) · [架构](ARCHITECTURE.md) · [产品范围](docs/product.md) · [资产](docs/assets.md) · [质量](docs/quality.md) · [任务索引](docs/exec-plans/README.md) · [协作规则](AGENTS.md)
+
+## 许可证
+
+原创源代码采用 [MIT License](LICENSE)。第三方依赖和资源仍遵循各自许可证，例如 [Montserrat 字体许可](prototype/assets/fonts/OFL.txt)。
+
+## 历史调研与交付资料
+
+以下保留早期版本背景，不作为当前实现、发布或验证结果。
 
 > 调研基准日：2026-11-03　|　最新 Android 交付：布谷笔记 v0.2.0　|　范围：Android 手机优先
 

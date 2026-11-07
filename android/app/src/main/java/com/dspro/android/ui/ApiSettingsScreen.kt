@@ -31,16 +31,21 @@ import com.dspro.android.data.ApiConfig
 import com.dspro.android.data.ChatTurn
 import com.dspro.android.data.DeepSeekClient
 import com.dspro.android.data.StreamEvent
-import kotlinx.coroutines.flow.first
+import com.dspro.android.data.normalizedDestination
+import com.dspro.android.data.requestDestinationError
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ApiSettingsScreen(
     config: ApiConfig,
+    clientFactory: (ApiConfig) -> DeepSeekClient,
     onSave: (ApiConfig) -> Unit,
-    onClear: () -> Unit,
+    onClear: (String) -> Unit,
     onBack: () -> Unit,
     onProviderChange: (String) -> ApiConfig,
     onMenu: (() -> Unit)? = null,
@@ -50,11 +55,15 @@ fun ApiSettingsScreen(
     var apiKey by remember(config.apiKey) { mutableStateOf(config.apiKey) }
     var baseUrl by remember(config.baseUrl) { mutableStateOf(config.baseUrl) }
     var model by remember(config.model) { mutableStateOf(config.model) }
+    var workspaceId by remember(config.workspaceId) { mutableStateOf(config.workspaceId) }
     var provider by remember(config.provider) { mutableStateOf(config.provider) }
+    var storageAvailable by remember(config.secureStorageAvailable) { mutableStateOf(config.secureStorageAvailable) }
+    var trustDestination by remember(config.trustedBaseUrl) { mutableStateOf(normalizedDestination(config.baseUrl) != null && normalizedDestination(config.baseUrl) == normalizedDestination(config.trustedBaseUrl)) }
     var providerMenu by remember { mutableStateOf(false) }
     var webSearch by remember(config.webSearchEnabled) { mutableStateOf(config.webSearchEnabled) }
     var showKey by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
+    var testJob by remember { mutableStateOf<Job?>(null) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
 
     fun draft() = ApiConfig(
@@ -64,31 +73,51 @@ fun ApiSettingsScreen(
         effort = config.effort,
         provider = provider,
         webSearchEnabled = webSearch,
+        workspaceId = workspaceId.trim(),
+        secureStorageAvailable = storageAvailable,
+        trustedBaseUrl = if (trustDestination) baseUrl.trim() else "",
     )
 
     fun test() {
         val cfg = draft()
+        if (!cfg.secureStorageAvailable || !onProviderChange(cfg.provider).secureStorageAvailable) {
+            testResult = false to "安全存储不可用，请检查设备后重新配置"
+            return
+        }
         if (cfg.apiKey.isBlank()) {
             testResult = false to "请先填写 API Key"
             return
         }
+        requestDestinationError(cfg)?.let {
+            testResult = false to it
+            return
+        }
         testing = true
         testResult = null
-        scope.launch {
+        testJob = scope.launch {
             testResult = try {
                 withTimeout(25_000) {
-                    val event = DeepSeekClient(cfg)
-                        .stream(listOf(ChatTurn("user", "只回复 ok")))
-                        .first { it is StreamEvent.Content || it is StreamEvent.Failure || it is StreamEvent.Done }
-                    when (event) {
-                        is StreamEvent.Failure -> false to event.message
-                        else -> true to "连接成功，模型可用"
+                    var terminal: Pair<Boolean, String>? = null
+                    var sawText = false
+                    clientFactory(cfg).stream(listOf(ChatTurn("user", "只回复 ok"))).collect { event ->
+                        when (event) {
+                            is StreamEvent.Content -> if (event.text.isNotBlank()) sawText = true
+                            is StreamEvent.Failure -> if (terminal == null) terminal = false to event.message
+                            StreamEvent.Done -> if (terminal == null) terminal = if (sawText) true to "连接成功，模型可用" else false to "服务未返回正文"
+                            else -> Unit
+                        }
                     }
+                    terminal ?: (false to "连接未完整结束")
                 }
+            } catch (e: TimeoutCancellationException) {
+                false to "连接超时"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                false to (e.message ?: "连接超时")
+                false to "连接失败或超时"
+            } finally {
+                testing = false
             }
-            testing = false
         }
     }
 
@@ -111,31 +140,41 @@ fun ApiSettingsScreen(
                 )
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    "各服务商的 Key 分开保存在本机；请求会发往当前配置的 Base URL。",
+                    "各服务商的 Key 分开保存在本机。连接测试会发送一条固定短消息，并可能产生 API 费用。",
                     color = c.muted,
                     fontSize = 11.5.sp,
                     lineHeight = 18.sp,
                 )
+                if (!storageAvailable) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("安全存储不可用，无法读取、保存或发送 API Key；请检查设备后重新配置。", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
                 Spacer(Modifier.height(18.dp))
 
                 ApiSection("连接")
                 ExposedDropdownMenuBox(expanded = providerMenu, onExpandedChange = { providerMenu = it }) {
                     OutlinedTextField(
-                        value = when (provider) { "openai" -> "OpenAI"; "aliyun" -> "阿里云百炼"; "custom" -> "OpenAI 兼容自定义"; else -> "DeepSeek" },
+                        value = when (provider) { "openai" -> "OpenAI"; "anthropic" -> "Claude"; "aliyun" -> "阿里云百炼"; "custom" -> "OpenAI 兼容自定义"; else -> "DeepSeek" },
                         onValueChange = {}, readOnly = true, label = { Text("服务商") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = providerMenu) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                     )
                     ExposedDropdownMenu(expanded = providerMenu, onDismissRequest = { providerMenu = false }) {
-                        listOf("deepseek" to "DeepSeek", "openai" to "OpenAI", "aliyun" to "阿里云百炼", "custom" to "OpenAI 兼容自定义").forEach { (id, label) ->
+                        listOf("deepseek" to "DeepSeek", "openai" to "OpenAI", "anthropic" to "Claude", "aliyun" to "阿里云百炼", "custom" to "OpenAI 兼容自定义").forEach { (id, label) ->
                             DropdownMenuItem(text = { Text(label) }, onClick = {
                                 providerMenu = false
                                 if (provider != id) {
+                                    testJob?.cancel()
+                                    testing = false
+                                    testResult = null
                                     provider = id
                                     val selected = onProviderChange(id)
+                                    storageAvailable = selected.secureStorageAvailable
+                                    trustDestination = normalizedDestination(selected.baseUrl) != null && normalizedDestination(selected.baseUrl) == normalizedDestination(selected.trustedBaseUrl)
                                     apiKey = selected.apiKey
                                     baseUrl = selected.baseUrl
                                     model = selected.model
+                                    workspaceId = selected.workspaceId
                                     webSearch = selected.webSearchEnabled
                                 }
                             })
@@ -192,7 +231,7 @@ fun ApiSettingsScreen(
                         Spacer(Modifier.height(7.dp))
                         OutlinedTextField(
                             value = baseUrl,
-                            onValueChange = { baseUrl = it },
+                            onValueChange = { baseUrl = it; trustDestination = false },
                             singleLine = true,
                             placeholder = { Text("https://api.deepseek.com", fontSize = 12.sp, color = c.subtle) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -201,11 +240,21 @@ fun ApiSettingsScreen(
                             shape = RoundedCornerShape(10.dp),
                         )
                         Spacer(Modifier.height(6.dp))
-                        Text("兼容 OpenAI 格式的代理地址也可以填在这里。", color = c.subtle, fontSize = 9.5.sp)
+                        Text("请求内容和 Key 会发送到此地址；非官方地址需要确认。", color = c.subtle, fontSize = 9.5.sp)
+                        if (requestDestinationError(draft()) != null || trustDestination) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = trustDestination, onCheckedChange = { trustDestination = it })
+                                Text("我确认将此连接的 Key 和对话发送到该地址", color = c.muted, fontSize = 11.sp)
+                            }
+                        }
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
+                if (provider == "anthropic") {
+                    OutlinedTextField(workspaceId, { workspaceId = it }, label = { Text("Workspace ID（按需填写）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(12.dp))
+                }
                 if (provider == "deepseek") {
                     Surface(color = c.surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, c.hairline)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -268,7 +317,7 @@ fun ApiSettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { onSave(draft()) },
-                        enabled = apiKey.isNotBlank() && baseUrl.trim().startsWith("https://") && model.isNotBlank(),
+                        enabled = storageAvailable && apiKey.isNotBlank() && requestDestinationError(draft()) == null && model.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = Color.White),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f).height(42.dp),
@@ -285,14 +334,14 @@ fun ApiSettingsScreen(
                         Text(if (testing) "测试中…" else "测试连接", color = c.muted, fontSize = 12.sp)
                     }
                 }
-                if (config.isConfigured) {
+                if (apiKey.isNotBlank() && storageAvailable) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "清除当前 API Key",
                         color = Color(0xFFD92D20),
                         fontSize = 10.5.sp,
                         modifier = Modifier
-                            .clickable { onClear() }
+                            .clickable { testJob?.cancel(); testing = false; onClear(provider); apiKey = "" }
                             .padding(vertical = 8.dp),
                     )
                 }

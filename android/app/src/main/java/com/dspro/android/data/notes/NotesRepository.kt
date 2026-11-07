@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
+data class FolderDeletionSummary(val noteCount: Int, val chatCount: Int, val childFolderCount: Int, val hiddenCount: Int)
+
 class NotesRepository(private val database: NotesDatabase) {
 
     private val dao = database.notesDao()
@@ -13,6 +15,8 @@ class NotesRepository(private val database: NotesDatabase) {
     val tags: Flow<List<TagEntity>> = dao.observeTags()
     val noteTags: Flow<List<NoteTagCrossRef>> = dao.observeNoteTags()
     val archivedNotes: Flow<List<NoteEntity>> = dao.observeArchived()
+    fun observeFolders(projectId: String?): Flow<List<FolderEntity>> = dao.observeFolders(projectId)
+    suspend fun getFolder(id: String): FolderEntity? = dao.getFolder(id)
 
     fun observeNote(id: String): Flow<NoteEntity?> = dao.observeNote(id)
     fun search(query: String): Flow<List<NoteEntity>> = dao.search(query)
@@ -21,10 +25,10 @@ class NotesRepository(private val database: NotesDatabase) {
     fun searchWorkspaceFolder(projectId: String?, query: String, folderId: String?): Flow<List<NoteEntity>> = dao.searchWorkspaceFolder(projectId, query, folderId)
 
     suspend fun importMarkdown(title: String, content: String, projectId: String?, folderId: String?): NoteEntity = database.withTransaction {
+        requireScope(projectId, folderId, requireActiveFolder = true)
         val now = System.currentTimeMillis()
         val note = NoteEntity(UUID.randomUUID().toString(), title.trim().ifBlank { "无标题笔记" }, content,
-            folderId?.takeIf { dao.existingFolder(it) != null },
-            projectId?.takeIf { database.projectsDao().getProject(it) != null }, createdAt = now, updatedAt = now)
+            folderId, projectId, createdAt = now, updatedAt = now)
         dao.upsert(note)
         refreshLinks(note)
         note
@@ -42,10 +46,10 @@ class NotesRepository(private val database: NotesDatabase) {
             dao.deleteRevisions(id); dao.deleteTagRefs(id); dao.deleteLinks(id); dao.deleteDraftNote(id)
             return@withTransaction null
         }
+        requireScope(projectId, folderId, requireActiveFolder = true)
         val now = System.currentTimeMillis()
         val note = NoteEntity(id, cleanTitle.ifBlank { "无标题笔记" }, content,
-            folderId?.takeIf { dao.existingFolder(it) != null },
-            projectId?.takeIf { database.projectsDao().getProject(it) != null }, pinned,
+            folderId, projectId, pinned,
             existing?.createdAt ?: now, now, existing?.deletedAt, existing?.archivedAt)
         dao.upsert(note)
         dao.resolveLinks(note.title, note.id)
@@ -59,13 +63,14 @@ class NotesRepository(private val database: NotesDatabase) {
         content: String = "",
         projectId: String? = null,
     ): NoteEntity = database.withTransaction {
+        requireScope(projectId, folderId, requireActiveFolder = true)
         val now = System.currentTimeMillis()
         val note = NoteEntity(
             id = UUID.randomUUID().toString(),
             title = title,
             content = content,
-            folderId = folderId?.let { dao.existingFolder(it) },
-            projectId = projectId?.takeIf { database.projectsDao().getProject(it) != null },
+            folderId = folderId,
+            projectId = projectId,
             createdAt = now,
             updatedAt = now,
         )
@@ -84,10 +89,11 @@ class NotesRepository(private val database: NotesDatabase) {
     ) {
         database.withTransaction {
             val existing = dao.getNote(id) ?: return@withTransaction
+            requireScope(existing.projectId, folderId, requireActiveFolder = folderId != existing.folderId)
             val note = existing.copy(
                 title = title.ifBlank { "无标题笔记" },
                 content = content,
-                folderId = folderId?.let { dao.existingFolder(it) },
+                folderId = folderId,
                 pinned = pinned,
             )
             if (note == existing) return@withTransaction
@@ -114,7 +120,11 @@ class NotesRepository(private val database: NotesDatabase) {
     fun observeTrash(): Flow<List<NoteEntity>> = dao.observeTrash()
 
     suspend fun moveToProject(id: String, projectId: String?) {
-        dao.moveToProject(id, projectId, System.currentTimeMillis())
+        database.withTransaction {
+            requireProject(projectId)
+            val note = dao.getNote(id) ?: return@withTransaction
+            dao.moveToProject(id, projectId, null, System.currentTimeMillis())
+        }
     }
 
     suspend fun saveVersion(noteId: String, content: String, name: String, kind: String = "manual"): NoteRevisionEntity {
@@ -148,23 +158,63 @@ class NotesRepository(private val database: NotesDatabase) {
         }
     }
 
-    suspend fun setFolderArchived(id: String, archived: Boolean) =
+    suspend fun setFolderArchived(id: String, archived: Boolean) = database.withTransaction {
+        requireNotNull(dao.getFolder(id)) { "文件夹不存在" }
         dao.archiveFolder(id, if (archived) System.currentTimeMillis() else null)
+    }
 
     suspend fun setTagArchived(id: String, archived: Boolean) =
         dao.archiveTag(id, if (archived) System.currentTimeMillis() else null)
 
     suspend fun deleteFolder(id: String) {
         database.withTransaction {
-            dao.clearFolderFromNotes(id)
-            database.chatDao().clearFolder(id)
-            database.chatDao().clearFolderFromTemporaryDrafts(id)
+            val folder = requireNotNull(dao.getFolder(id)) { "文件夹不存在" }
+            dao.moveNotesFolder(id, folder.parentId)
+            database.chatDao().moveSessionFolder(id, folder.parentId)
+            database.chatDao().moveTemporaryDraftFolder(id, folder.parentId)
+            dao.promoteFolders(id, folder.parentId)
             dao.deleteFolder(id)
         }
     }
 
-    suspend fun renameFolder(id: String, name: String) { dao.renameFolder(id, name.trim().ifBlank { "新文件夹" }) }
-    suspend fun moveToFolder(id: String, folderId: String?) { dao.moveToFolder(id, folderId?.takeIf { dao.existingFolder(it) != null }, System.currentTimeMillis()) }
+    suspend fun folderDeletionSummary(id: String): FolderDeletionSummary {
+        requireNotNull(dao.getFolder(id)) { "文件夹不存在" }
+        val chatDao = database.chatDao()
+        return FolderDeletionSummary(
+            noteCount = dao.countNotesInFolder(id),
+            chatCount = chatDao.countAllSessionsInFolder(id),
+            childFolderCount = dao.countChildFolders(id),
+            hiddenCount = dao.countHiddenNotesInFolder(id) + chatDao.countHiddenSessionsInFolder(id),
+        )
+    }
+
+    suspend fun renameFolder(id: String, name: String) {
+        requireNotNull(dao.getFolder(id)) { "文件夹不存在" }
+        dao.renameFolder(id, name.trim().ifBlank { "新文件夹" })
+    }
+    suspend fun moveToFolder(id: String, folderId: String?) = database.withTransaction {
+        val note = requireNotNull(dao.getNote(id)) { "笔记不存在" }
+        requireScope(note.projectId, folderId, requireActiveFolder = true)
+        dao.moveToFolder(id, folderId, System.currentTimeMillis())
+    }
+
+    suspend fun moveFolder(id: String, parentId: String?) = database.withTransaction {
+        val folder = requireNotNull(dao.getFolder(id)) { "文件夹不存在" }
+        if (parentId == id) error("文件夹不能移动到自身")
+        if (parentId != null) {
+            val parent = requireNotNull(dao.getFolder(parentId)) { "目标文件夹不存在" }
+            require(parent.projectId == folder.projectId) { "不能移动到其他项目的文件夹" }
+            require(!isEffectivelyArchived(parent.id)) { "不能移动到已归档的文件夹" }
+            var cursor: FolderEntity? = parent
+            val visited = mutableSetOf<String>()
+            while (cursor != null) {
+                require(visited.add(cursor.id)) { "文件夹树存在循环" }
+                require(cursor.id != folder.id) { "不能移动到自己的子文件夹" }
+                cursor = cursor.parentId?.let { dao.getFolder(it) }
+            }
+        }
+        dao.setFolderParent(id, parentId)
+    }
     fun observeArchived(): Flow<List<NoteEntity>> = dao.observeArchived()
     suspend fun archive(id: String) {
         val now = System.currentTimeMillis()
@@ -179,14 +229,17 @@ class NotesRepository(private val database: NotesDatabase) {
         }
     }
 
-    suspend fun createFolder(name: String): FolderEntity {
+    suspend fun createFolder(name: String, projectId: String? = null, parentId: String? = null): FolderEntity = database.withTransaction {
+        requireScope(projectId, parentId, requireActiveFolder = true)
         val folder = FolderEntity(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "新文件夹" },
             sort = (System.currentTimeMillis() % 100000).toInt(),
+            projectId = projectId,
+            parentId = parentId,
         )
         dao.upsertFolder(folder)
-        return folder
+        folder
     }
 
     suspend fun createTag(name: String): TagEntity {
@@ -226,6 +279,28 @@ class NotesRepository(private val database: NotesDatabase) {
 
     suspend fun backlinkNotes(noteId: String): List<NoteEntity> =
         dao.backlinks(noteId).mapNotNull { dao.getNote(it.fromNoteId) }
+
+    private suspend fun requireProject(projectId: String?) {
+        require(projectId == null || database.projectsDao().getProject(projectId) != null) { "项目不存在，请重新选择" }
+    }
+
+    private suspend fun requireScope(projectId: String?, folderId: String?, requireActiveFolder: Boolean) {
+        requireProject(projectId)
+        val folder = folderId?.let { requireNotNull(dao.getFolder(it)) { "文件夹不存在，请重新选择" } }
+        require(folder == null || folder.projectId == projectId) { "文件夹不属于当前项目，请重新选择" }
+        require(!requireActiveFolder || folder == null || !isEffectivelyArchived(folder.id)) { "文件夹已归档，请选择其他位置" }
+    }
+
+    private suspend fun isEffectivelyArchived(folderId: String): Boolean {
+        var cursor = dao.getFolder(folderId)
+        val visited = mutableSetOf<String>()
+        while (cursor != null) {
+            require(visited.add(cursor.id)) { "文件夹树存在循环" }
+            if (cursor.archivedAt != null) return true
+            cursor = cursor.parentId?.let { dao.getFolder(it) }
+        }
+        return false
+    }
 
     private suspend fun refreshLinks(note: NoteEntity) {
         dao.clearLinksFrom(note.id)

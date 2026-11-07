@@ -175,7 +175,8 @@ class BackupService(private val context: Context, private val database: NotesDat
         val root = JSONObject(String(manifest, Charsets.UTF_8))
         require(root.optString("format") == "dspro-user-backup" && root.optInt("version") == 1 && root.optInt("databaseVersion") in 6..NotesDatabase.SCHEMA_VERSION) { "Unsupported backup format or database version" }
         val data = root.getJSONObject("data")
-        if (root.optInt("databaseVersion") == 6) {
+        val databaseVersion = root.optInt("databaseVersion")
+        if (databaseVersion == 6) {
             data.put("temporary_chat_drafts", JSONArray())
             val notes = data.getJSONArray("notes")
             for (i in 0 until notes.length()) notes.getJSONObject(i).put("archivedAt", JSONObject.NULL)
@@ -188,6 +189,7 @@ class BackupService(private val context: Context, private val database: NotesDat
         tables.forEach { table -> require(data.opt(table) is JSONArray && data.getJSONArray(table).length() <= 200000) { "Invalid $table records" } }
         val allowed = tables.toSet()
         require(data.keys().asSequence().all { it in allowed }) { "Unexpected data table" }
+        if (databaseVersion < NotesDatabase.SCHEMA_VERSION) normalizeLegacyFolders(data)
         validateRelations(data)
         val archivePaths = data.getJSONArray("attachments")
         for (i in 0 until archivePaths.length()) {
@@ -240,13 +242,22 @@ class BackupService(private val context: Context, private val database: NotesDat
             }
         }
         val projectIds = ids("projects", "id")
-        val folderIds = ids("folders", "id")
+        val folderRows = data.getJSONArray("folders")
+        val folders = (0 until folderRows.length()).map { index -> folderRows.getJSONObject(index).let { row ->
+            ScopedFolderRecord(
+                id = row.getString("id"),
+                name = row.getString("name"),
+                sort = row.optInt("sort"),
+                archivedAt = row.optNullableString("archivedAt")?.toLong(),
+                projectId = row.optNullableString("projectId"),
+                parentId = row.optNullableString("parentId"),
+            )
+        } }
         val tagIds = ids("tags", "id")
         val noteIds = ids("notes", "id")
         val sessionIds = ids("chat_sessions", "id")
         ids("temporary_chat_drafts", "projectScope")
         checkRefs("notes", "projectId", projectIds)
-        checkRefs("notes", "folderId", folderIds)
         checkRefs("chat_sessions", "projectId", projectIds)
         checkRefs("memories", "projectId", projectIds)
         checkRefs("note_revisions", "noteId", noteIds)
@@ -254,7 +265,22 @@ class BackupService(private val context: Context, private val database: NotesDat
         checkRefs("note_links", "toNoteId", noteIds)
         checkRefs("chat_messages", "sessionId", sessionIds)
         checkRefs("chat_drafts", "sessionId", sessionIds)
-        checkRefs("temporary_chat_drafts", "folderId", folderIds)
+        val folderReferences = mutableListOf<FolderScopeReference>()
+        fun collectFolderReferences(table: String, idField: String, projectField: String, rows: JSONArray = data.getJSONArray(table)) {
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                folderReferences += FolderScopeReference(
+                    table = table,
+                    rowId = row.get(idField).toString(),
+                    projectId = row.optNullableString(projectField),
+                    folderId = row.optNullableString("folderId"),
+                )
+            }
+        }
+        collectFolderReferences("notes", "id", "projectId")
+        collectFolderReferences("chat_sessions", "id", "projectId")
+        collectFolderReferences("temporary_chat_drafts", "projectScope", "projectId")
+        FolderScopeMigration.validateScoped(folders, projectIds, folderReferences)
         checkRefs("note_tags", "noteId", noteIds)
         checkRefs("note_tags", "tagId", tagIds)
         val cross = data.getJSONArray("note_tags")
@@ -275,6 +301,48 @@ class BackupService(private val context: Context, private val database: NotesDat
             require(draft.optString("projectScope") == expectedScope) { "Invalid temporary draft project scope" }
             require(JSONArray(draft.optString("selectedNoteIdsJson", "[]")).length() <= ContextSnapshotService.MAX_NOTES) { "Too many draft note references" }
             require(JSONArray(draft.optString("pendingAttachmentsJson", "[]")).length() <= 8) { "Too many draft attachments" }
+        }
+    }
+
+    private fun normalizeLegacyFolders(data: JSONObject) {
+        fun rows(table: String) = data.getJSONArray(table)
+        fun stringOrNull(row: JSONObject, key: String) = row.optNullableString(key)
+        val projects = rows("projects")
+        val projectIds = (0 until projects.length()).mapTo(mutableSetOf()) { projects.getJSONObject(it).getString("id") }
+        val folderRows = rows("folders")
+        val folders = (0 until folderRows.length()).map { index -> folderRows.getJSONObject(index).let { row ->
+            FolderScopeRecord(row.getString("id"), row.getString("name"), row.optInt("sort"), stringOrNull(row, "archivedAt")?.toLong())
+        } }
+        val references = mutableListOf<FolderScopeReference>()
+        fun collect(table: String, idField: String, projectField: String) {
+            val values = rows(table)
+            for (i in 0 until values.length()) {
+                val row = values.getJSONObject(i)
+                references += FolderScopeReference(table, row.get(idField).toString(), stringOrNull(row, projectField), stringOrNull(row, "folderId"))
+            }
+        }
+        collect("notes", "id", "projectId")
+        collect("chat_sessions", "id", "projectId")
+        collect("temporary_chat_drafts", "projectScope", "projectId")
+        val plan = FolderScopeMigration.splitLegacy(folders, projectIds, references)
+        val normalized = JSONArray()
+        plan.folders.forEach { folder -> normalized.put(JSONObject()
+            .put("id", folder.id)
+            .put("name", folder.name)
+            .put("sort", folder.sort)
+            .put("archivedAt", folder.archivedAt ?: JSONObject.NULL)
+            .put("projectId", folder.projectId ?: JSONObject.NULL)
+            .put("parentId", JSONObject.NULL))
+        }
+        data.put("folders", normalized)
+        listOf("notes", "chat_sessions", "temporary_chat_drafts").forEach { table ->
+            val idField = if (table == "temporary_chat_drafts") "projectScope" else "id"
+            val tableRows = rows(table)
+            for (i in 0 until tableRows.length()) {
+                val row = tableRows.getJSONObject(i)
+                val key = FolderScopeMigration.referenceKey(table, row.get(idField).toString())
+                if (key in plan.referenceFolderIds) row.put("folderId", plan.referenceFolderIds[key] ?: JSONObject.NULL)
+            }
         }
     }
     private fun rewriteDraftAttachmentPaths(rows: JSONArray, paths: Map<String, String>) {

@@ -11,6 +11,20 @@
 .vscode/
 .codex/
 .agents/
+!/.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/intake/
+!.agents/skills/feature/
+!.agents/skills/bugfix/
+!.agents/skills/review/
+!.agents/skills/research/
+.agents/skills/*/*
+!.agents/skills/*/SKILL.md
+!.agents/skills/*/agents/
+.agents/skills/*/agents/*
+!.agents/skills/*/agents/openai.yaml
 .aws/
 
 # Credentials, signing material and real application data must never enter Git.

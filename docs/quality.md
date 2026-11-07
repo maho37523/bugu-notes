@@ -1,6 +1,6 @@
 # 质量基线与验证
 
-状态：2026-11-06，已进入获准的工程基础实施。实际构建、Lint、回归及限制见 [R02](exec-plans/R02-quality-baseline.md)，自动入口见 [R04](exec-plans/R04-check-automation.md)。[R00](exec-plans/R00-reboot-audit.md)、[v0.2.1](15-bugu-notes-v0.2.1-release.md) 与 [M01](exec-plans/M01-design-assets.md) 保留各自时间/范围，不替代本次执行。检查由 Codex 执行，用户不需要手动操作终端。
+状态：工程基础实施已完成；截至 2026-11-07，v0.4.0 授权离线代码工作包和基线已完成，报告见下方及 [实施任务](exec-plans/T-20261107-v040-implementation.md)。长期设备/在线验收仍未完成。[R00](exec-plans/R00-reboot-audit.md)、[v0.2.1](15-bugu-notes-v0.2.1-release.md) 与 [M01](exec-plans/M01-design-assets.md) 保留各自时间/范围，不替代本次执行。检查由 Codex 执行，用户不需要手动操作终端。
 
 ## 日常入口
 
@@ -34,7 +34,7 @@ baseline 需要已有 JDK 21、SDK 35 / Build Tools 35.0.1、Gradle 8.9 离线�
 | Android 源码或构建配置 | 同源 `assembleDebug` + `lintDebug`，再选下列相关回归 | 新增错误阻止集成；警告区分既有/新增并评估，不通过全局忽略来“变绿” |
 | 编辑器、Markdown、保存与版本 | editor018；保存/版本涉及持久化时加 lifecycle019 | 触摸、中文 IME、emoji、撤销、收键盘与长文需要设备验证 |
 | 聊天、草稿、项目、归档或搜索 | lifecycle019；涉及请求/流式再加 network021 | 项目切换、停止/重试和进程恢复使用测试会话；离线结果不证明真实 API |
-| Entity / DAO / 迁移 / 备份 / 附件 | migration019、lifecycle019、ZIP Codec；先复核历史 v6 脚本 | 改动迁移前补齐受影响历史版本、失败回滚和附件完整性；schema 8 的新建库不能代替升级测试 |
+| Entity / DAO / 迁移 / 备份 / 附件 | migration019、lifecycle019（含 schema 8→9 目录转换）、ZIP Codec；先复核历史 v6 脚本 | 改动迁移前补齐受影响历史版本、失败回滚和附件完整性；schema 9 的新建库不能代替升级测试 |
 | 网络与连接配置 | network021；必要时 lifecycle019 验证消息持久化 | 线上验证另获授权，用测试 Key，不输出凭据，记录供应商/模型与结果 |
 | 品牌、主题或资源路径 | 设计校验、资源引用、构建/Lint及设备视觉 | 获准改图后才能更新校验值，保留原图；不能以哈希更新代替视觉审查 |
 | Web 演示代码或资源 | 静态引用与相关浏览器交互 | 保持演示身份，不能据此确认 Android 功能；本轮不运行 Web |
@@ -63,12 +63,12 @@ baseline 需要已有 JDK 21、SDK 35 / Build Tools 35.0.1、Gradle 8.9 离线�
 
 | 命令 | 覆盖与限制 |
 | --- | --- |
-| `python3 tools/regression/migration019.py` | 当前代码对比真实 6→8 SQL 迁移链与生成 Room schema，检查列、索引和历史记录；不等于全量 1→8 验证 |
+| `python3 tools/regression/migration019.py` | 历史回归：对比 6→8 SQL 迁移链与生成 Room schema，检查列、索引和历史记录；不等于全量 1→9 验证 |
 | `bash tools/regression/lifecycle019/run.sh` | 生产 Repository、DAO SQL、实体、上下文、备份服务配合真实 SQLite JDBC 与适配器；生命周期、草稿、归档恢复、搜索和旧备份兼容 |
 | `bash tools/regression/editor018/run.sh` | 使用当前已编译编辑器/渲染类；原文往返、选区、撤销、Markdown、Unicode 和长文逻辑；不覆盖真实触摸/IME |
 | `bash tools/regression/network021/run.sh` | 离线配置迁移、供应商隔离、请求体、SSE 和搜索 fixtures；不证明线上连通 |
 | `python3 android/tools/regression/test_backup_zip_codec.py` | 实际 Java ZIP Codec 的往返、路径、重复条目及大小限制 |
-| `python3 android/tools/regression/test_room_migration_v6.py` | 从当前 DDL 重建合成 v5，执行 5→8 SQL 并检查草稿删除、旧记录和 sources/queries 默认值；不是真实历史库或完整 1→8 |
+| `python3 android/tools/regression/test_room_migration_v6.py` | 从当前 DDL 重建合成 v5，执行历史 5→8 SQL 并检查草稿删除、旧记录和 sources/queries 默认值；schema 8→9 在 lifecycle019 单独验证；不是真实历史库或完整 1→9 |
 
 脚本位置见 [根回归说明](../tools/regression/README.md)、[Android 回归目录](../android/tools/regression)。目录名中的历史版本不等于当前覆盖；`backup018/`、`migration018.py` 保留为历史回归，不自动当作当前 schema 验收。
 
@@ -80,9 +80,19 @@ R02 已实际复现 `test_room_migration_v6.py` 的重复列失败，修复重�
 
 ## 必须补齐的验收
 
+2026-11-07 v0.4.0 离线实施基线已在隔离副本通过：构建/Lint、migration、lifecycle（含 Room schema 8→9、schema 8 ZIP 共享目录转换与恢复失败附件保护）、editor、network、ZIP Codec、历史迁移均通过；证据为 `.engineering/reports/20261107-115907-056011/summary.json`。该结果不覆盖下列设备、真实数据、在线或发布验收。
+
 - 真机/模拟器：连续编辑触摸、中文 IME、emoji、软硬键盘、长文、进程死亡、项目切换和草稿隔离。
 - 数据：全部受支持历史升级链、恢复失败回滚、附件完整性、归档/删除、同名双链及改名。
 - 网络：使用用户授权的测试配置验证供应商及模型兼容、搜索成功/空结果/失败、停止/重试；不在报告中记录 Key。
 - 发布：确认应用身份和升级签名连续性，记录版本、APK 哈希和签名验证；不声称已有 release 流水线。
 
 启动会清理超期回收站，完整恢复会替换业务数据，删除项目会删除项目记忆。上述验收只能针对受保护的副本/测试数据。历史 Lint 0 errors/12 warnings 的报告含旧目录路径；依赖 TLS 警告需评估可达性，不能只因总错误为零而忽略。
+
+## 2026-11-07 隔离启动检查补充
+
+`tools/regression/android_startup.py` 在专用可丢弃 AVD 验证 APK 新安装、Compose 首页、异步 Room 打开、合成 schema 8→9 覆盖升级、正文/目录归属和多次冷启动；身份防护、命令与报告内容见 [回归说明](../tools/regression/README.md#隔离-android-启动与覆盖升级)。该检查不在 baseline 中自动执行，不能将 JDBC 或 assembleDebug 通过等同于运行通过。交付要求本地可运行的 APK 时，应在隔离 AVD 运行最终同哈希产物，并记录实际系统版本。
+
+本轮 Android 15 / 4 KB 与 Android 17 / 16 KB 实际运行均通过；基线 `.engineering/reports/20261107-123141-568382/summary.json`、设备报告 `.engineering/reports/startup35-final/summary.json` 和 `.engineering/reports/startup17-final/summary.json`。原包和重建包哈希相同，用户真机闪退未复现，不能据此称已修复；OPPO、真实旧库、IME、在线与全部历史升级链仍未确认。
+
+后续 USB 真机日志已将启动故障定位到旧临时草稿悬空 folderId。修复仅限 SQL 8→9 读取，新增原包失败/修复通过的 Android 17 及 JDBC 负例，完整基线 `.engineering/reports/20261107-125956-652818/summary.json` 通过；Android 15/17 `startup35-dangling-fixed` / `startup17-dangling-fixed` 通过。用户明确批准后，备份并校验现有 APK/数据库/附件，再在 OPPO Android 17 覆盖修复包，进程、前台 Activity 和新增异常检查通过。该后续证据取代前段“真机根因未确认”的历史状态，不取代用户实际内容和完整体验验收。详见 [启动修复任务](exec-plans/T-20261107-v040-startup-crash.md)。

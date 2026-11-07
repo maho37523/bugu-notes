@@ -1,0 +1,3 @@
+interface:
+  display_name: "review · 布谷笔记"
+  short_description: "独立核对布谷笔记产品规范与代码，报告缺陷、测试结果和风险"

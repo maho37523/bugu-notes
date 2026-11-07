@@ -1,0 +1,3 @@
+interface:
+  display_name: "bugfix · 布谷笔记"
+  short_description: "复现布谷笔记既有行为故障、定位根因并完成最小修复与回归"

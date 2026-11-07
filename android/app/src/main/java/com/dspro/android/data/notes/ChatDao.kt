@@ -25,6 +25,9 @@ interface ChatDao {
     @Query("SELECT * FROM temporary_chat_drafts WHERE projectScope = :scope LIMIT 1")
     suspend fun getTemporaryDraft(scope: String): TemporaryChatDraftEntity?
 
+    @Query("SELECT * FROM temporary_chat_drafts WHERE projectId = :projectId LIMIT 1")
+    suspend fun getTemporaryDraftForProject(projectId: String): TemporaryChatDraftEntity?
+
     @Query("SELECT d.* FROM temporary_chat_drafts d WHERE d.projectId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = d.projectId) ORDER BY d.updatedAt DESC LIMIT 1")
     suspend fun getOrphanTemporaryDraft(): TemporaryChatDraftEntity?
 
@@ -36,6 +39,12 @@ interface ChatDao {
 
     @Query("UPDATE temporary_chat_drafts SET folderId = NULL WHERE folderId = :folderId")
     suspend fun clearFolderFromTemporaryDrafts(folderId: String)
+
+    @Query("UPDATE temporary_chat_drafts SET folderId = :newFolderId WHERE folderId = :oldFolderId")
+    suspend fun moveTemporaryDraftFolder(oldFolderId: String, newFolderId: String?)
+
+    @Query("DELETE FROM temporary_chat_drafts WHERE projectId = :projectId")
+    suspend fun deleteTemporaryDraftForProject(projectId: String)
 
     @Query("SELECT * FROM chat_sessions WHERE archivedAt IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC")
     fun observeSessions(): Flow<List<ChatSessionEntity>>
@@ -94,14 +103,29 @@ interface ChatDao {
     @Query("UPDATE chat_sessions SET folderId = NULL WHERE folderId = :folderId")
     suspend fun clearFolder(folderId: String)
 
+    @Query("UPDATE chat_sessions SET folderId = :newFolderId WHERE folderId = :oldFolderId")
+    suspend fun moveSessionFolder(oldFolderId: String, newFolderId: String?)
+
     @Query("UPDATE chat_sessions SET archivedAt = NULL, updatedAt = :time WHERE id = :id")
     suspend fun unarchive(id: Long, time: Long)
 
     @Query("DELETE FROM chat_sessions WHERE id = :id")
     suspend fun deleteSession(id: Long)
 
-    @Query("UPDATE chat_sessions SET projectId = :projectId, updatedAt = :time WHERE id = :id")
-    suspend fun moveSession(id: Long, projectId: String?, time: Long)
+    @Query("UPDATE chat_sessions SET projectId = :projectId, folderId = :folderId, updatedAt = :time WHERE id = :id")
+    suspend fun moveSession(id: Long, projectId: String?, folderId: String?, time: Long)
+
+    @Query("SELECT COUNT(*) FROM chat_sessions WHERE folderId = :folderId")
+    suspend fun countSessionsInFolder(folderId: String): Int
+
+    @Query("SELECT COUNT(*) FROM chat_sessions WHERE folderId = :folderId AND (archivedAt IS NOT NULL OR deletedAt IS NOT NULL)")
+    suspend fun countHiddenSessionsInFolder(folderId: String): Int
+
+    @Query("SELECT COUNT(*) FROM chat_sessions WHERE folderId = :folderId")
+    suspend fun countAllSessionsInFolder(folderId: String): Int
+
+    @Query("SELECT EXISTS(SELECT 1 FROM chat_drafts d JOIN chat_sessions s ON s.id = d.sessionId WHERE s.projectId = :projectId AND (length(trim(d.text)) > 0 OR d.quoteText IS NOT NULL OR d.quoteMessageId IS NOT NULL OR d.selectedNoteIdsJson != '[]' OR d.pendingAttachmentsJson != '[]'))")
+    suspend fun projectHasContentDrafts(projectId: String): Boolean
 
     @Query("UPDATE chat_sessions SET projectId = :toProjectId, updatedAt = :time WHERE projectId = :fromProjectId")
     suspend fun moveAllToProject(fromProjectId: String, toProjectId: String?, time: Long)

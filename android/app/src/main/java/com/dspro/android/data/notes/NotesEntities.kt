@@ -22,12 +22,14 @@ data class NoteEntity(
     val archivedAt: Long? = null,
 )
 
-@Entity(tableName = "folders")
+@Entity(tableName = "folders", indices = [Index(value = ["projectId", "parentId"])])
 data class FolderEntity(
     @PrimaryKey val id: String,
     val name: String,
     val sort: Int = 0,
     val archivedAt: Long? = null,
+    val projectId: String? = null,
+    val parentId: String? = null,
 )
 
 @Entity(tableName = "tags")

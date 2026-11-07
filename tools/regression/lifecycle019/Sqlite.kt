@@ -6,6 +6,15 @@ interface SupportSQLiteDatabase {
     fun query(sql: String): Cursor
     fun execSQL(sql: String)
     fun insert(table: String, conflict: Int, values: ContentValues): Long
+    fun compileStatement(sql: String): SupportSQLiteStatement
+}
+interface SupportSQLiteStatement {
+    fun clearBindings()
+    fun bindString(index: Int, value: String)
+    fun bindLong(index: Int, value: Long)
+    fun bindNull(index: Int)
+    fun executeInsert(): Long
+    fun executeUpdateDelete(): Int
 }
 class JdbcDatabase(val connection: Connection) : SupportSQLiteDatabase {
     override fun execSQL(sql: String) { connection.createStatement().use { it.execute(sql) } }
@@ -37,6 +46,21 @@ class JdbcDatabase(val connection: Connection) : SupportSQLiteDatabase {
         connection.prepareStatement("INSERT INTO `$table` ($columns) VALUES ($placeholders)").use { stmt ->
             values.values.values.forEachIndexed { i,value -> stmt.setObject(i+1,value) }
             return stmt.executeUpdate().toLong()
+        }
+    }
+    override fun compileStatement(sql: String): SupportSQLiteStatement = object : SupportSQLiteStatement {
+        private val bindings = mutableMapOf<Int, Any?>()
+        override fun clearBindings() = bindings.clear()
+        override fun bindString(index: Int, value: String) { bindings[index] = value }
+        override fun bindLong(index: Int, value: Long) { bindings[index] = value }
+        override fun bindNull(index: Int) { bindings[index] = null }
+        override fun executeInsert(): Long = connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { statement ->
+            bindings.forEach { (index, value) -> statement.setObject(index, value) }
+            statement.executeUpdate().toLong()
+        }
+        override fun executeUpdateDelete(): Int = connection.prepareStatement(sql).use { statement ->
+            bindings.forEach { (index, value) -> statement.setObject(index, value) }
+            statement.executeUpdate()
         }
     }
 }

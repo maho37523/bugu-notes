@@ -57,8 +57,17 @@ interface NotesDao {
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun hardDelete(id: String)
 
-    @Query("SELECT * FROM folders ORDER BY sort, name")
+    @Query("SELECT * FROM folders ORDER BY projectId, parentId, sort, name, id")
     fun observeFolders(): Flow<List<FolderEntity>>
+
+    @Query("SELECT * FROM folders WHERE projectId IS :projectId ORDER BY parentId, sort, name, id")
+    fun observeFolders(projectId: String?): Flow<List<FolderEntity>>
+
+    @Query("SELECT * FROM folders WHERE projectId IS :projectId ORDER BY parentId, sort, name, id")
+    suspend fun foldersForProject(projectId: String?): List<FolderEntity>
+
+    @Query("SELECT * FROM folders WHERE id = :id LIMIT 1")
+    suspend fun getFolder(id: String): FolderEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertFolder(folder: FolderEntity)
@@ -77,6 +86,30 @@ interface NotesDao {
 
     @Query("UPDATE folders SET archivedAt = :time WHERE id = :id")
     suspend fun archiveFolder(id: String, time: Long?)
+
+    @Query("UPDATE folders SET parentId = :parentId WHERE id = :id")
+    suspend fun setFolderParent(id: String, parentId: String?)
+
+    @Query("UPDATE folders SET projectId = :projectId WHERE projectId = :fromProjectId")
+    suspend fun moveFoldersToProject(fromProjectId: String, projectId: String?)
+
+    @Query("UPDATE folders SET parentId = :newParentId WHERE parentId = :oldParentId")
+    suspend fun promoteFolders(oldParentId: String, newParentId: String?)
+
+    @Query("UPDATE notes SET folderId = :newFolderId WHERE folderId = :oldFolderId")
+    suspend fun moveNotesFolder(oldFolderId: String, newFolderId: String?)
+
+    @Query("SELECT COUNT(*) FROM notes WHERE folderId = :folderId")
+    suspend fun countNotesInFolder(folderId: String): Int
+
+    @Query("SELECT COUNT(*) FROM notes WHERE folderId = :folderId AND (archivedAt IS NOT NULL OR deletedAt IS NOT NULL)")
+    suspend fun countHiddenNotesInFolder(folderId: String): Int
+
+    @Query("SELECT COUNT(*) FROM folders WHERE parentId = :folderId")
+    suspend fun countChildFolders(folderId: String): Int
+
+    @Query("SELECT COUNT(*) FROM folders f JOIN folders a ON f.id = a.id WHERE f.parentId = :folderId AND a.archivedAt IS NOT NULL")
+    suspend fun countDirectArchivedChildFolders(folderId: String): Int
 
     @Query("UPDATE tags SET archivedAt = :time WHERE id = :id")
     suspend fun archiveTag(id: String, time: Long?)
@@ -153,8 +186,8 @@ interface NotesDao {
     @Query("DELETE FROM note_links WHERE fromNoteId = :id OR toNoteId = :id")
     suspend fun deleteLinks(id: String)
 
-    @Query("UPDATE notes SET projectId = :projectId, updatedAt = :time WHERE id = :id")
-    suspend fun moveToProject(id: String, projectId: String?, time: Long)
+    @Query("UPDATE notes SET projectId = :projectId, folderId = :folderId, updatedAt = :time WHERE id = :id")
+    suspend fun moveToProject(id: String, projectId: String?, folderId: String?, time: Long)
 
     @Query("UPDATE notes SET projectId = :toProjectId, updatedAt = :time WHERE projectId = :fromProjectId")
     suspend fun moveAllToProject(fromProjectId: String, toProjectId: String?, time: Long)

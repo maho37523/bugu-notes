@@ -16,8 +16,11 @@ data class ApiConfig(
     val effort: ThinkingEffort = ThinkingEffort.High,
     val provider: String = "deepseek",
     val webSearchEnabled: Boolean = false,
+    val workspaceId: String = "",
+    val secureStorageAvailable: Boolean = true,
+    val trustedBaseUrl: String = "",
 ) {
-    val isConfigured: Boolean get() = apiKey.isNotBlank()
+    val isConfigured: Boolean get() = secureStorageAvailable && apiKey.isNotBlank()
 
     val displayModel: String
         get() = when (model) {
@@ -29,7 +32,8 @@ data class ApiConfig(
     val endpoint: String
         get() {
             val base = baseUrl.trim().trimEnd('/')
-            return if (base.endsWith("/chat/completions")) base else "$base/chat/completions"
+            val suffix = if (provider == "anthropic") "/messages" else "/chat/completions"
+            return if (base.endsWith(suffix)) base else "$base$suffix"
         }
 }
 
@@ -37,25 +41,21 @@ class ApiConfigStore(context: Context) {
 
     private val appContext = context.applicationContext
 
-    private val prefs: SharedPreferences by lazy {
-        try {
+    private val prefs: SharedPreferences? by lazy {
+        runCatching {
             val masterKey = MasterKey.Builder(appContext)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
             EncryptedSharedPreferences.create(
-                appContext,
-                "ds_api_secure",
-                masterKey,
+                appContext, "ds_api_secure", masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
             )
-        } catch (_: Exception) {
-            // Some OEM devices fail to provision the keystore. Keep the prototype usable.
-            appContext.getSharedPreferences("ds_api_fallback", Context.MODE_PRIVATE)
-        }
+        }.getOrNull()
     }
 
-    fun load(providerOverride: String? = null): ApiConfig {
+    fun load(providerOverride: String? = null): ApiConfig = runCatching {
+        val prefs = prefs ?: return ApiConfig(provider = providerOverride ?: "deepseek", secureStorageAvailable = false)
         val provider = providerOverride ?: (prefs.getString("provider", "deepseek") ?: "deepseek")
         if (provider == "deepseek") {
             val migrated = ApiConfigStoreCodec.migrateLegacy(prefs.all)
@@ -72,12 +72,13 @@ class ApiConfigStore(context: Context) {
         val key = storedKey ?: if (provider == "deepseek") legacyKey else ""
         val defaultBase = when (provider) {
             "openai" -> "https://api.openai.com/v1"
+            "anthropic" -> "https://api.anthropic.com/v1"
             "aliyun" -> "https://dashscope.aliyuncs.com/compatible-mode/v1"
             "custom" -> ""
             else -> "https://api.deepseek.com"
         }
-        val defaultModel = when (provider) { "openai" -> "gpt-4o-mini"; "aliyun" -> "qwen-plus"; "custom" -> ""; else -> "deepseek-flash" }
-        return ApiConfig(
+        val defaultModel = when (provider) { "openai" -> "gpt-4o-mini"; "anthropic" -> "claude-sonnet-5-5"; "aliyun" -> "qwen-plus"; "custom" -> ""; else -> "deepseek-flash" }
+        ApiConfig(
             apiKey = key,
             baseUrl = storedBase ?: if (provider == "deepseek") prefs.getString("base_url", defaultBase) ?: defaultBase else defaultBase,
             model = storedModel ?: if (provider == "deepseek") prefs.getString("model", defaultModel) ?: defaultModel else defaultModel,
@@ -85,26 +86,38 @@ class ApiConfigStore(context: Context) {
                 ?: if (prefs.getBoolean("thinking", true)) ThinkingEffort.High else ThinkingEffort.None,
             provider = provider,
             webSearchEnabled = prefs.getBoolean("web_search_enabled", false),
+            workspaceId = prefs.getString("${provider}_workspace_id", "") ?: "",
+            trustedBaseUrl = prefs.getString("${provider}_trusted_base_url", "") ?: "",
         )
-    }
+    }.getOrElse { ApiConfig(provider = providerOverride ?: "deepseek", secureStorageAvailable = false) }
 
-    fun save(config: ApiConfig) {
-        val next = ApiConfigStoreCodec.saveProvider(prefs.all, config.provider, config.apiKey, config.baseUrl, config.model)
+    fun save(config: ApiConfig): Boolean = runCatching {
+        if (!config.secureStorageAvailable) return false
+        val prefs = prefs ?: return false
+        val next = ApiConfigStoreCodec.saveProvider(prefs.all, config.provider, config.apiKey, config.baseUrl, config.model, config.workspaceId)
         prefs.edit()
             .putString("provider", next["provider"].toString())
             .putString("${config.provider}_api_key", next["${config.provider}_api_key"].toString())
             .putString("${config.provider}_base_url", next["${config.provider}_base_url"].toString())
             .putString("${config.provider}_model", next["${config.provider}_model"].toString())
+            .putString("${config.provider}_workspace_id", next["${config.provider}_workspace_id"].toString())
+            .putString("${config.provider}_trusted_base_url", config.trustedBaseUrl)
             .putBoolean("web_search_enabled", config.webSearchEnabled)
             .putString("reasoning_effort", config.effort.apiValue)
-            .apply()
-    }
+            .commit()
+    }.getOrDefault(false)
 
-    fun clear(provider: String) {
+    fun clear(provider: String): Boolean = runCatching {
+        val prefs = prefs ?: return false
         val next = ApiConfigStoreCodec.clearProviderKey(prefs.all, provider)
-        prefs.edit().apply {
+        val secureCleared = prefs.edit().apply {
             if ("${provider}_api_key" !in next) remove("${provider}_api_key")
             if (provider == "deepseek" && "api_key" !in next) remove("api_key")
-        }.apply()
-    }
+        }.commit()
+        if (!secureCleared) return false
+        appContext.getSharedPreferences("ds_api_fallback", Context.MODE_PRIVATE).edit().apply {
+            remove("${provider}_api_key")
+            if (provider == "deepseek") remove("api_key")
+        }.commit()
+    }.getOrDefault(false)
 }

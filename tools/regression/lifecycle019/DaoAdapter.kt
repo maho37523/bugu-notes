@@ -54,6 +54,7 @@ private fun readResult(rs:ResultSet,target:Type):Any? {
 }
 private fun readRow(rs:ResultSet,target:Type):Any? {
     val cls=target as Class<*>
+    if(cls==Boolean::class.java || cls==java.lang.Boolean::class.java) return rs.getInt(1)!=0
     if (cls==String::class.java) return rs.getString(1)
     if(cls==Int::class.java || cls==Integer::class.java) return rs.getObject(1)?.let { (it as Number).toInt() }
     if(cls==Long::class.java || cls==java.lang.Long::class.java) return rs.getObject(1)?.let { (it as Number).toLong() }

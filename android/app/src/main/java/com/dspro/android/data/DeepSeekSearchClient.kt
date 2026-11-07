@@ -18,6 +18,7 @@ class DeepSeekSearchClient(private val config: ApiConfig) {
     @OptIn(InternalCoroutinesApi::class)
     suspend fun search(rawQuery: String): List<DeepSeekSearchResult> = withContext(Dispatchers.IO) {
         require(config.provider == "deepseek") { "联网搜索仅支持 DeepSeek" }
+        require(config.secureStorageAvailable) { "安全存储不可用" }
         require(config.apiKey.isNotBlank()) { "请先填写 DeepSeek API Key" }
         val endpoint = searchEndpointFor(config.baseUrl)
         val query = normalizeSearchQuery(rawQuery)
@@ -33,14 +34,14 @@ class DeepSeekSearchClient(private val config: ApiConfig) {
             connection.connectTimeout = 15_000
             connection.readTimeout = 45_000
             connection.doOutput = true
+            connection.instanceFollowRedirects = false
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Authorization", "Bearer ${config.apiKey}")
             val body = JSONObject().put("query", query).put("count", 5).put("need_content", true)
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             if (code !in 200..299) {
-                val raw = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                throw IllegalStateException(searchHttpError(code, raw))
+                throw IllegalStateException(searchHttpError(code))
             }
             parseSearchResponse(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
         } finally {

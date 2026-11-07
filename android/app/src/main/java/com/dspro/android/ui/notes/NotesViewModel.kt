@@ -11,6 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
@@ -23,11 +25,22 @@ data class NoteListItem(
     val folderName: String?,
 )
 
+data class FolderLoadState(val projectId: String?, val loaded: Boolean)
+
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = (application as DsApplication).container.notesRepository
 
-    val folders: StateFlow<List<FolderEntity>> = repository.folders
+    private val folderProject = MutableStateFlow<String?>(null)
+    val folderLoadState = MutableStateFlow(FolderLoadState(null, false))
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val folders: StateFlow<List<FolderEntity>> = folderProject
+        .flatMapLatest { projectId ->
+            repository.observeFolders(projectId)
+                .onStart { folderLoadState.value = FolderLoadState(projectId, false) }
+                .onEach { folderLoadState.value = FolderLoadState(projectId, true) }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val allTags: StateFlow<List<TagEntity>> = repository.tags
@@ -115,6 +128,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setProject(projectId: String?) {
         projectFilter.value = projectId
+        folderProject.value = projectId
         folderFilter.value = null
         tagFilter.value = null
         query.value = ""
@@ -133,9 +147,9 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createFolder(name: String) {
+    fun createFolder(name: String, parentId: String? = null) {
         if (name.isBlank()) return
-        viewModelScope.launch { repository.createFolder(name.trim()) }
+        viewModelScope.launch { repository.createFolder(name.trim(), currentProject.value, parentId) }
     }
 
     fun createTag(name: String) {

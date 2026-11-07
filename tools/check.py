@@ -41,8 +41,13 @@ def git(root: Path, *args: str) -> bytes:
 
 def forbidden(name: str) -> bool:
     p = Path(name)
+    skill_file = (len(p.parts) in (4, 5)
+                  and p.parts[:2] == ('.agents', 'skills')
+                  and p.parts[2] in {'intake', 'feature', 'bugfix', 'review', 'research'}
+                  and p.parts[3:] in {('SKILL.md',), ('agents', 'openai.yaml')})
+    excluded = EXCLUDED_PARTS - {'.agents'} if skill_file else EXCLUDED_PARTS
     return (p.is_absolute() or '..' in p.parts
-            or bool(set(p.parts) & EXCLUDED_PARTS)
+            or bool(set(p.parts) & excluded)
             or p.name == 'local.properties' or p.name.startswith('.env')
             or p.suffix.lower() in PRIVATE_SUFFIXES
             or any(x in p.name.lower() for x in ('.db-', '.sqlite-', '.sqlite3-')))

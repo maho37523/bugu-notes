@@ -2,6 +2,8 @@ package com.dspro.android
 
 import android.content.Context
 import com.dspro.android.data.ApiConfigStore
+import com.dspro.android.data.ApiConfig
+import com.dspro.android.data.DeepSeekClient
 import com.dspro.android.data.notes.ChatRepository
 import com.dspro.android.data.notes.MemoryRepository
 import com.dspro.android.data.notes.NotesDatabase
@@ -23,4 +25,5 @@ class AppContainer(context: Context) {
     val backupService = BackupService(context.applicationContext, database)
     val markdownImportService = MarkdownImportService(notesRepository)
     val apiConfigStore = ApiConfigStore(context.applicationContext)
+    fun chatClient(config: ApiConfig) = DeepSeekClient(config)
 }

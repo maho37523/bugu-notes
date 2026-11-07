@@ -15,10 +15,10 @@ flowchart TD
     Container --> Services[Repository / 业务服务]
     UI --> Services
     Services --> DAO[Room DAO]
-    DAO --> DB[(dsh_notes.db / schema 8)]
+    DAO --> DB[(dsh_notes.db / schema 9)]
     UI --> Context[ContextSnapshotService]
     Context --> Notes[NotesRepository]
-    UI --> Network[聊天 SSE / DeepSeek 搜索客户端]
+    UI --> Network[Chat Completions / Claude Messages SSE / DeepSeek 搜索]
     Network --> API[外部 API]
     UI --> Files[私有附件目录 / PDF 文本提取]
     Services --> Backup[BackupService / ZIP Codec]
@@ -30,7 +30,7 @@ flowchart TD
 ### 数据流
 
 - 笔记输入经 NoteDocument，延迟保存到 Repository 和 DAO，更新正文及链接；版本另存 revisions。证据：[编辑器界面](android/app/src/main/java/com/dspro/android/ui/notes/NoteEditorScreen.kt)、[Repository](android/app/src/main/java/com/dspro/android/data/notes/NotesRepository.kt)。
-- 聊天校验配置及引用，固定笔记/附件快照，保存消息及草稿状态，再组合历史、项目指令、记忆和可选搜索资料，接收 SSE 并保存增量。证据：DshApp、[上下文快照](android/app/src/main/java/com/dspro/android/data/notes/ContextSnapshotService.kt)。
+- 聊天校验配置及引用，固定笔记/附件快照，保存消息及草稿状态，再组合历史、项目指令、记忆和可选搜索资料，接收 SSE 并保存增量。v0.3.0 Claude 和终态处理已有离线候选代码；设备及在线验收尚未确认。v0.4.0 目录实体已增加项目与父目录 scope，并统一写入校验；schema 迁移、旧备份转换和界面改动的离线证据见 [实施任务](docs/exec-plans/T-20261107-v040-implementation.md)。
 - 备份恢复先校验归档与关系、暂存附件，再在数据库事务内替换业务表和路径，提交后清理旧附件。证据：[BackupService](android/app/src/main/java/com/dspro/android/data/notes/BackupService.kt)。
 
 ### 耦合点
@@ -45,7 +45,7 @@ DshApp 同时负责导航、请求、草稿、附件及内容生命周期（审�
 
 ## 已确认约束
 
-- 应用身份 `com.dspro.android`、数据库名 `dsh_notes.db`、历史迁移 1→8 及备份兼容性必须保护；任何后续变更须有单独评估和验证。
+- 应用身份 `com.dspro.android`、数据库名 `dsh_notes.db`、历史迁移 1→9 及备份兼容性必须保护；schema 9 的目录映射按 scope 拆分旧共享目录，具体验收证据见 v0.4.0 实施任务。
 - Room 当前 `exportSchema=false`，schema 历史尚未独立导出。证据：[NotesDatabase](android/app/src/main/java/com/dspro/android/data/notes/NotesDatabase.kt)。
 - 应用启动调用 `cleanupTrash(30)`；不能在真实用户数据上把启动当作只读检查。
 - 完整业务备份排除 API 配置，恢复是替换而非合并。见 [ADR-0001](docs/decisions/0001-backup-excludes-api-config.md)。

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>布谷笔记 v0.4.0 布局验收稿</title>
+  <style>
+    :root { color-scheme: light; --page:#f3f5f3; --surface:#fff; --soft:#edf1ee; --ink:#202923; --muted:#68756d; --line:#dce3de; --accent:#47785b; --selected:#dcebe0; --shadow:0 12px 34px #15251d18; }
+    [data-theme="dark"] { color-scheme:dark; --page:#171c19; --surface:#222a25; --soft:#2b352e; --ink:#edf3ef; --muted:#aab8af; --line:#3a4840; --accent:#a3d2ae; --selected:#354b3b; --shadow:0 12px 34px #0007; }
+    * { box-sizing:border-box }
+    body { margin:0; padding:28px; background:var(--page); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"PingFang SC",sans-serif }
+    h1 { font-size:22px; margin:0 0 8px }
+    .intro { color:var(--muted); margin:0 0 20px }
+    .toolbar { position:sticky; top:0; z-index:5; display:flex; justify-content:space-between; align-items:center; max-width:1500px; margin:0 auto 22px; padding:10px 14px; border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow) }
+    button { color:inherit; font:inherit; border:1px solid var(--line); background:var(--surface); border-radius:8px; padding:7px 11px; cursor:pointer }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(320px,1fr)); gap:22px; max-width:1500px; margin:auto }
+    .case { min-width:0 }
+    .case h2 { margin:0 0 7px; font-size:15px }
+    .case p { min-height:40px; margin:0 0 10px; color:var(--muted); font-size:12px }
+    .device { margin:auto; overflow:hidden; border:1px solid var(--line); border-radius:18px; background:var(--surface); box-shadow:var(--shadow) }
+    .phone { width:min(100%,390px); height:610px }
+    .wide { width:100%; height:500px; border-radius:12px }
+    .top { height:62px; display:grid; grid-template-columns:1fr 1.4fr 1fr; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--surface) }
+    .top.wide-top { grid-template-columns:180px minmax(220px,1fr) 180px }
+    .brand { display:flex; align-items:center; gap:8px; min-width:0; font-weight:650 }
+    .logo { display:grid; place-items:center; width:30px; height:30px; flex:0 0 30px; border-radius:9px; background:var(--soft); color:var(--accent); font-weight:800 }
+    .project { justify-self:center; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:650; border:0; background:transparent }
+    .actions { justify-self:end; display:flex; gap:6px }
+    .icon { padding:6px 8px; line-height:1; min-width:34px }
+    .body { height:calc(100% - 62px); display:grid; grid-template-columns:210px minmax(0,1fr) }
+    .phone .body { display:block; height:calc(100% - 62px) }
+    .tree { overflow:auto; padding:14px 10px; border-right:1px solid var(--line); background:var(--surface) }
+    .phone .tree { display:none }
+    .tree.open { display:block; position:absolute; z-index:3; width:min(78vw,290px); height:548px; border:1px solid var(--line); border-radius:0 12px 12px 0; box-shadow:var(--shadow) }
+    .tree-head { display:flex; justify-content:space-between; align-items:center; margin:0 2px 12px; font-weight:650 }
+    .tree-row { display:flex; align-items:center; gap:6px; min-height:36px; padding:5px 7px; border-radius:7px; white-space:nowrap }
+    .tree-row.depth1 { padding-left:23px }
+    .tree-row.depth2 { padding-left:40px }
+    .tree-row.current { background:var(--selected); color:var(--ink); font-weight:650 }
+    .tree-row .ellipsis { margin-left:auto; color:var(--muted) }
+    .content { min-width:0; padding:18px 22px }
+    .crumbs { display:flex; align-items:center; gap:8px; min-width:0; margin-bottom:20px; color:var(--muted) }
+    .crumb-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink) }
+    .crumbs .add { margin-left:auto; flex:0 0 auto; border-color:var(--accent); color:var(--accent) }
+    .title { font-size:19px; font-weight:650; margin:6px 0 14px }
+    .empty { display:grid; place-content:center; justify-items:center; height:350px; color:var(--muted); text-align:center }
+    .empty strong { color:var(--ink); margin-bottom:8px }
+    .empty button { margin-top:14px; color:var(--accent); border-color:var(--accent) }
+    .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px }
+    .card { padding:12px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
+    .card small { display:block; margin-top:5px; color:var(--muted) }
+    .notice { max-width:1500px; margin:18px auto 0; color:var(--muted); font-size:12px }
+    @media(max-width:760px) { body{padding:16px} .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body data-theme="light">
+  <div class="toolbar">
+    <div><h1>v0.4.0 内容工作区 · 布局验收稿</h1><p class="intro">低保真可视状态稿。可切换明暗主题、打开窄屏目录抽屉；产品规则已确认，布局仍待验收。</p></div>
+    <button id="theme" type="button">切换深色</button>
+  </div>
+  <main class="grid">
+    <section class="case">
+      <h2>A · 窄屏 / 空项目 / 内容区新增</h2>
+      <p>项目切换器在顶栏中轴；窄屏显示目录入口；空状态和新增入口位于当前资料区。点开 ☰ 查看目录树抽屉。</p>
+      <div class="device phone">
+        <header class="top">
+          <div class="brand"><button class="icon drawer-toggle" aria-label="打开目录树">☰</button></div>
+          <button class="project" title="项目 A（完整名称）">项目 A ▾</button>
+          <div class="actions"><button class="icon" aria-label="搜索">⌕</button></div>
+        </header>
+        <div class="body">
+          <nav class="tree">
+            <div class="tree-head"><span>项目 A · 目录</span><button class="icon close-tree" aria-label="关闭目录树">×</button></div>
+            <div class="tree-row">▾　资料</div><div class="tree-row depth1">▸　研究</div><div class="tree-row">▸　工作</div>
+          </nav>
+          <section class="content">
+            <div class="crumbs"><span class="crumb-label">资料库</span><button class="add">＋ 新建</button></div>
+            <div class="empty"><strong>项目 A 还没有内容</strong><span>从当前项目创建第一篇笔记、对话或文件夹</span><button>＋ 新建内容</button></div>
+          </section>
+        </div>
+      </div>
+    </section>
+    <section class="case">
+      <h2>B · 窄屏 / 深层目录 / 抽屉展开</h2>
+      <p>树选择和面包屑共享当前目录；选中态同时有底色和文字标记。窄屏返回优先关闭抽屉。</p>
+      <div class="device phone">
+        <header class="top">
+          <div class="brand"><button class="icon drawer-toggle" aria-label="打开目录树">☰</button></div>
+          <button class="project" title="设计系统迁移项目（完整名称）">设计系统迁移… ▾</button>
+          <div class="actions"><button class="icon" aria-label="搜索">⌕</button></div>
+        </header>
+        <div class="body">
+          <nav class="tree open">
+            <div class="tree-head"><span>当前项目 · 目录</span><button class="icon close-tree" aria-label="关闭目录树">×</button></div>
+            <div class="tree-row">▾　资料</div><div class="tree-row depth1">▾　研究</div><div class="tree-row depth2 current">•　需求验收 <span class="ellipsis">⋯</span></div><div class="tree-row depth1">▸　交付</div>
+          </nav>
+          <section class="content">
+            <div class="crumbs"><span>资料库</span><span>›</span><span>资料</span><span>›</span><span class="crumb-label">研究 / 需求验收</span><button class="add">＋</button></div>
+            <div class="title">需求验收</div>
+            <div class="cards"><div class="card">首轮反馈<small>笔记 · 刚刚</small></div><div class="card">评审记录<small>对话 · 昨天</small></div></div>
+          </section>
+        </div>
+      </div>
+    </section>
+    <section class="case">
+      <h2>C · 宽屏 / 嵌套目录 / 工作区侧栏</h2>
+      <p>宽屏目录树常驻左侧；内容标题和面包屑显示路径；新增按钮表达当前目录上下文。</p>
+      <div class="device wide">
+        <header class="top wide-top">
+          <div class="brand"><span class="logo">布</span><span>布谷笔记</span></div>
+          <button class="project" title="个人知识管理项目">个人知识管理项目 ▾</button>
+          <div class="actions"><button class="icon" aria-label="搜索">⌕</button><button class="icon" aria-label="设置">⚙</button></div>
+        </header>
+        <div class="body">
+          <nav class="tree"><div class="tree-head"><span>项目目录</span><button class="icon" aria-label="新建目录">＋</button></div><div class="tree-row">▾　资料</div><div class="tree-row depth1">▾　研究</div><div class="tree-row depth2 current">•　需求验收</div><div class="tree-row depth1">▸　交付</div></nav>
+          <section class="content"><div class="crumbs"><span>资料库</span><span>›</span><span>资料</span><span>›</span><span>研究</span><span>›</span><span class="crumb-label">需求验收</span><button class="add">＋ 新建</button></div><div class="title">需求验收</div><div class="cards"><div class="card">布局草图<small>笔记 · 今天</small></div><div class="card">项目评审<small>对话 · 昨天</small></div></div></section>
+        </div>
+      </div>
+    </section>
+    <section class="case">
+      <h2>D · 宽屏 / 长项目名 / 深色主题</h2>
+      <p>左右区域等宽约束项目切换器居中于内容栏；长名称省略，切换器内保留完整名称。Logo 原图未使用，容器使用主题表面色。</p>
+      <div class="device wide">
+        <header class="top wide-top">
+          <div class="brand"><span class="logo">布</span><span>布谷笔记</span></div>
+          <button class="project" title="长期个人研究与跨学科知识管理工作区">长期个人研究与跨学科知识管理… ▾</button>
+          <div class="actions"><button class="icon" aria-label="搜索">⌕</button><button class="icon" aria-label="设置">⚙</button></div>
+        </header>
+        <div class="body">
+          <nav class="tree"><div class="tree-head"><span>当前项目 · 目录</span><button class="icon" aria-label="新建目录">＋</button></div><div class="tree-row">▾　资料</div><div class="tree-row depth1 current">•　参考资料</div><div class="tree-row">▸　草稿</div></nav>
+          <section class="content"><div class="crumbs"><span>资料库</span><span>›</span><span>资料</span><span>›</span><span class="crumb-label">参考资料</span><button class="add">＋ 新建</button></div><div class="title">参考资料</div><div class="cards"><div class="card">研究索引<small>笔记 · 今天</small></div><div class="card">来源核对<small>笔记 · 昨天</small></div></div></section>
+        </div>
+      </div>
+    </section>
+  </main>
+  <p class="notice">待确认项：内容栏宽度断点与抽屉宽度、长项目名称查看方式、空目录状态文案、目录行操作入口位置。此稿不代表设备验证或用户体验验收。</p>
+  <script>
+    const root = document.body;
+    document.getElementById('theme').addEventListener('click', (event) => {
+      const dark = root.dataset.theme !== 'dark'; root.dataset.theme = dark ? 'dark' : 'light';
+      event.currentTarget.textContent = dark ? '切换浅色' : '切换深色';
+    });
+    document.querySelectorAll('.drawer-toggle').forEach((button) => button.addEventListener('click', () => {
+      const tree = button.closest('.device').querySelector('.tree'); tree.classList.toggle('open');
+    }));
+    document.querySelectorAll('.close-tree').forEach((button) => button.addEventListener('click', () => button.closest('.tree').classList.remove('open')));
+  </script>
+</body>
+</html>

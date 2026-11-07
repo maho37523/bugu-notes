@@ -14,8 +14,8 @@ android {
         applicationId = "com.dspro.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.2.1"
+        versionCode = 15
+        versionName = "0.4.0"
     }
 
     buildTypes {

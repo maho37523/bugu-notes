@@ -66,10 +66,11 @@ fun DshHairline(modifier: Modifier = Modifier) {
 
 @Composable
 fun DshWordmark(modifier: Modifier = Modifier) {
+    val c = Dsh.colors
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFE3F0E5))
+            .background(c.surface)
             .padding(horizontal = 7.dp, vertical = 4.dp),
     ) {
         Image(

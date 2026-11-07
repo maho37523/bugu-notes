@@ -24,3 +24,13 @@ cp_all="$run_dir/classes:$app_classes:$stdlib:$coroutines:$gson"
   android/app/src/main/java/com/dspro/android/data/DeepSeekSearchClient.kt \
   tools/regression/network021/ProtocolTest.kt
 "$java_dir/java" -cp "$cp_all" com.dspro.android.data.ProtocolTestKt
+mkdir -p "$run_dir/store-classes"
+"$java_dir/java" -cp "$compiler:$stdlib:$trove:$coroutines:$annotations" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
+  -no-stdlib -no-reflect -Xfriend-paths="$app_classes" -classpath "$cp_all" -d "$run_dir/store-classes" \
+  tools/regression/network021/store_fixture/FakeAndroid.kt \
+  tools/regression/network021/store_fixture/FakeSecurity.kt \
+  android/app/src/main/java/com/dspro/android/data/ApiConfig.kt \
+  android/app/src/main/java/com/dspro/android/data/ApiProtocol.kt \
+  tools/regression/network021/store_fixture/StoreTest.kt
+"$java_dir/java" -cp "$run_dir/store-classes:$cp_all" com.dspro.android.data.StoreTestKt
+python3 tools/regression/network021/check_backup_rules.py

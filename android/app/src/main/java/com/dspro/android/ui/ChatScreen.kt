@@ -317,6 +317,12 @@ private fun MessageItem(
             Text(msg.searchStatus, color = c.muted, fontSize = 10.5.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
         if (msg.error != null) {
+            if (msg.text.isNotEmpty()) {
+                SelectionContainer {
+                    MarkdownText(text = msg.text, color = MaterialTheme.colorScheme.onSurface, onWikiLink = onOpenNote)
+                }
+                Spacer(Modifier.height(6.dp))
+            }
             ErrorCard(msg.error)
         } else if (msg.searching) {
             Text(msg.searchStatus.ifBlank { "正在联网搜索…" }, color = c.muted, fontSize = 11.sp)
@@ -679,7 +685,7 @@ private fun Composer(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Text(if (provider == "deepseek") "$modelLabel · ${effort.label}" else "$modelLabel · 自定义", color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (provider == "deepseek") "DeepSeek · $modelLabel · ${effort.label}" else "${when (provider) { "openai" -> "OpenAI"; "anthropic" -> "Claude"; "aliyun" -> "阿里云百炼"; else -> "自定义" }} · $modelLabel", color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Icon(Icons.Outlined.ExpandMore, null, Modifier.size(12.dp), tint = c.subtle)
                         }
                         DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {

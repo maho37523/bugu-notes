@@ -46,8 +46,16 @@ class ChatRepository(private val database: NotesDatabase) {
     suspend fun saveTemporaryDraft(projectId: String?, draft: ChatDraft) {
         database.withTransaction {
             val globalScope = scope(projectId)
+            requireScope(projectId, draft.folderId, requireActiveFolder = draft.folderId != null)
             if (projectId == null && dao.getTemporaryDraft(globalScope) == null) {
-                dao.getOrphanTemporaryDraft()?.let { dao.clearTemporaryDraft(it.projectScope) }
+                val orphan = dao.getOrphanTemporaryDraft()
+                if (orphan != null) {
+                    require(orphan.text.isBlank() && orphan.quoteText.isNullOrBlank() &&
+                        decodeStrings(orphan.selectedNoteIdsJson).isEmpty() && decodeAttachments(orphan.pendingAttachmentsJson).isEmpty()) {
+                        "存在未处理的项目草稿，不能覆盖全局草稿"
+                    }
+                    dao.clearTemporaryDraft(orphan.projectScope)
+                }
             }
             dao.upsertTemporaryDraft(TemporaryChatDraftEntity(globalScope, projectId, draft.folderId, draft.text,
                 draft.quoteMessageId, draft.quoteText, JSONArray(draft.selectedNoteIds.distinct()).toString(), encodeAttachments(draft.pendingAttachments), System.currentTimeMillis()))
@@ -61,10 +69,11 @@ class ChatRepository(private val database: NotesDatabase) {
 
     suspend fun commitTemporaryChat(projectId: String?, folderId: String?, title: String, messages: List<ChatMessage>): Session = database.withTransaction {
         require(messages.isNotEmpty()) { "Cannot commit an empty conversation" }
+        requireScope(projectId, folderId, requireActiveFolder = folderId != null)
         val now = System.currentTimeMillis()
         val id = now * 1000 + (0..999).random()
         val cleanTitle = title.trim().ifBlank { "新会话" }.take(80)
-        val targetFolder = folderId?.takeIf { database.notesDao().existingFolder(it) != null }
+        val targetFolder = folderId
         dao.upsertSession(ChatSessionEntity(id, projectId, cleanTitle, now, now, folderId = targetFolder))
         messages.forEachIndexed { index, message -> dao.upsertMessage(toEntity(message, id, now + index)) }
         val draftScope = scope(projectId)
@@ -119,10 +128,11 @@ class ChatRepository(private val database: NotesDatabase) {
         return dao.setAutoTitle(sessionId, clean, System.currentTimeMillis()) > 0
     }
 
-    suspend fun createSession(projectId: String?, title: String = "新会话", folderId: String? = null): Session {
+    suspend fun createSession(projectId: String?, title: String = "新会话", folderId: String? = null): Session = database.withTransaction {
+        requireScope(projectId, folderId, requireActiveFolder = folderId != null)
         val now = System.currentTimeMillis()
         val id = now * 1000 + (0..999).random()
-        val targetFolder = folderId?.takeIf { database.notesDao().existingFolder(it) != null }
+        val targetFolder = folderId
         val session = Session(
             id = id,
             title = title,
@@ -141,7 +151,7 @@ class ChatRepository(private val database: NotesDatabase) {
                 folderId = targetFolder,
             )
         )
-        return session
+        session
     }
 
     suspend fun archive(sessionId: Long) {
@@ -155,7 +165,11 @@ class ChatRepository(private val database: NotesDatabase) {
     suspend fun trash(ids: Collection<Long>) { val now = System.currentTimeMillis(); database.withTransaction { ids.distinct().forEach { dao.trash(it, now) } } }
     suspend fun restore(id: Long) = dao.restore(id, System.currentTimeMillis())
     suspend fun permanentlyDelete(ids: Collection<Long>) = database.withTransaction { ids.distinct().forEach { dao.clearMessages(it); dao.clearDraft(it); dao.deleteSession(it) } }
-    suspend fun moveToFolder(id: Long, folderId: String?) = dao.moveToFolder(id, folderId?.takeIf { database.notesDao().existingFolder(it) != null }, System.currentTimeMillis())
+    suspend fun moveToFolder(id: Long, folderId: String?) = database.withTransaction {
+        val session = requireNotNull(dao.getSession(id)) { "对话不存在" }
+        requireScope(session.projectId, folderId, requireActiveFolder = folderId != null)
+        dao.moveToFolder(id, folderId, System.currentTimeMillis())
+    }
     fun observeTrash(): Flow<List<Session>> = dao.observeTrash().map { rows -> rows.map(::toDomain) }
     fun observeArchived(): Flow<List<Session>> = dao.observeArchived().map { rows -> rows.map(::toDomain) }
 
@@ -163,7 +177,10 @@ class ChatRepository(private val database: NotesDatabase) {
         dao.archiveAllInProject(projectId, System.currentTimeMillis())
     }
 
-    suspend fun move(id: Long, projectId: String?) = dao.moveSession(id, projectId, System.currentTimeMillis())
+    suspend fun move(id: Long, projectId: String?) = database.withTransaction {
+        requireScope(projectId, null, requireActiveFolder = false)
+        dao.moveSession(id, projectId, null, System.currentTimeMillis())
+    }
 
     suspend fun delete(sessionIds: Collection<Long>, createReplacement: Boolean, replacementProjectId: String?): Session? =
         database.withTransaction {
@@ -174,6 +191,21 @@ class ChatRepository(private val database: NotesDatabase) {
             }
             if (createReplacement) createSession(replacementProjectId) else null
         }
+
+    private suspend fun requireScope(projectId: String?, folderId: String?, requireActiveFolder: Boolean) {
+        require(projectId == null || database.projectsDao().getProject(projectId) != null) { "项目不存在，请重新选择" }
+        val folder = folderId?.let { requireNotNull(database.notesDao().getFolder(it)) { "文件夹不存在，请重新选择" } }
+        require(folder == null || folder.projectId == projectId) { "文件夹不属于当前项目，请重新选择" }
+        if (requireActiveFolder && folder != null) {
+            var cursor: FolderEntity? = folder
+            val visited = mutableSetOf<String>()
+            while (cursor != null) {
+                require(visited.add(cursor.id)) { "文件夹树存在循环" }
+                require(cursor.archivedAt == null) { "文件夹已归档，请选择其他位置" }
+                cursor = cursor.parentId?.let { database.notesDao().getFolder(it) }
+            }
+        }
+    }
 
     private fun toDomain(entity: ChatSessionEntity, messages: List<ChatMessage> = emptyList()): Session =
         Session(

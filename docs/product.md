@@ -18,10 +18,12 @@
 | 项目、指令及手动记忆 | `ProjectsRepository.kt`、`MemoryRepository.kt`、对应 UI 与 `DshApp.kt` |
 | 聊天、草稿、首条消息事务提交 | `ChatRepository.kt`、`ChatDao.kt`、`DshApp.kt` |
 | 归档、回收站、恢复、搜索 | Notes/Chat Repository、`WorkspaceSearchService.kt`、`ui/notes/TrashScreen.kt` |
-| API 配置及流式调用 | `data/ApiConfig.kt`、`ApiProtocol.kt`、`DeepSeekClient.kt`；按供应商保存配置 |
+| API 配置及流式调用 | `data/ApiConfig.kt`、`ApiProtocol.kt`、`DeepSeekClient.kt`；按供应商保存配置，v0.3.0 的 Claude 适配正在验证，在线结果未确认 |
 | DeepSeek 可选搜索及真实 URL 来源展示 | `DeepSeekSearchClient.kt`、`DshApp.kt`；在线成功待确认 |
 | 引用上下文快照 | `ContextSnapshotService.kt`；最多 8 篇，总笔记正文预算 12,000 字符 |
 | Markdown 导入、单篇导出、完整业务备份恢复 | `MarkdownImportService.kt`、`NoteEditorScreen.kt`、`BackupService.kt`、`BackupZipCodec.java` |
+
+v0.4.0 项目目录 scope、嵌套目录树、父级操作和内容上下文新增已完成源码实现，并通过本机离线构建/Lint及合成回归；触屏、中文输入法和实际视觉仍未设备验收。详细交接见 [v0.4.0 实施任务](exec-plans/T-20261107-v040-implementation.md)。
 
 ## 部分实现
 
