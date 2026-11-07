@@ -2,6 +2,7 @@ package com.dspro.android.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.SecurityFixture
+import com.dspro.android.data.chatgpt.*
 class FakePrefs: SharedPreferences {
     val data = linkedMapOf<String, Any>()
     var failRead = false
@@ -63,4 +64,34 @@ fun main() {
     check(!store.clear("openai"))
     check(store.load("openai").apiKey.isEmpty())
     println("PASS: secure-store init/read/write failure, provider isolation, explicit fallback cleanup")
+    ctx.fallback.failCommit = false
+    val priorFallbackReads = ctx.fallbackReads
+    secure.data["openai_api_key"] = "preserved-synthetic-api-key"
+    secure.data["web_search_enabled"] = true
+    secure.data["reasoning_effort"] = "low"
+    check(store.save(ApiConfig(provider = "chatgpt", model = "catalog-model", chatGptAccountId = "registration")))
+    check(secure.data["web_search_enabled"] == true && secure.data["reasoning_effort"] == "low")
+    check(store.load("openai").apiKey == "preserved-synthetic-api-key")
+    check(store.load("chatgpt").chatGptAccountId == "registration" && !store.load("chatgpt").isConfigured)
+    check(!store.save(ApiConfig(provider = "chatgpt", apiKey = "synthetic-token-misuse")))
+    val tokenPrefs = FakePrefs()
+    SecurityFixture.byName["ds_chatgpt_secure"] = tokenPrefs
+    val credentials = ChatGptCredential("registration", "Account", "issued-client", "subject", "fixture@example.invalid",
+        "synthetic-id", "synthetic-access", "synthetic-refresh", CHATGPT_SCOPES.split(' ').toSet(), Long.MAX_VALUE,
+        models = listOf(ChatGptModel("catalog-model", "Catalog model")))
+    val tokenStore = AndroidChatGptStore(ctx)
+    val snapshot = ChatGptSnapshot("urn:uuid:00000000-0000-4000-8000-000000000001", listOf(credentials))
+    tokenStore.save(snapshot)
+    check(tokenStore.load() == snapshot)
+    check("registrations" !in secure.data && tokenPrefs.data.keys == setOf("registrations"))
+    check(ctx.fallbackReads == priorFallbackReads)
+    tokenPrefs.failCommit = true
+    check(runCatching { tokenStore.save(snapshot.copy(accounts = emptyList())) }.isFailure)
+    check(tokenStore.load() == snapshot)
+    tokenPrefs.failCommit = false
+    tokenPrefs.data["registrations"] = "damaged-json"
+    check(!ChatGptAccounts(AndroidChatGptStore(ctx)).state.value.secureStorageAvailable)
+    SecurityFixture.failInit = true
+    check(!ChatGptAccounts(AndroidChatGptStore(ctx)).state.value.secureStorageAvailable)
+    println("PASS: subscription selection preserves API settings, separate encrypted registration records, atomic write failure and corrupt/Keystore failure close access")
 }

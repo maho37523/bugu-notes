@@ -15,6 +15,7 @@ internal fun normalizedDestination(raw: String): String? = runCatching {
 
 internal fun requestDestinationError(config: ApiConfig): String? {
     val destination = normalizedDestination(config.baseUrl) ?: return "请填写有效的 HTTPS 地址"
+    if (config.provider == "chatgpt") return if (destination == "https://api.openai.com/v1") null else "ChatGPT 订阅只允许使用官方服务地址"
     val host = URI(destination).host
     val official = when (config.provider) {
         "deepseek" -> host == "api.deepseek.com"
@@ -30,6 +31,8 @@ internal fun requestDestinationError(config: ApiConfig): String? {
 
 internal fun requestConfigError(config: ApiConfig): String? = when {
     !config.secureStorageAvailable -> "安全存储不可用，请检查设备后重新配置"
+    config.provider == "chatgpt" && !config.isConfigured -> "请先登录并授权使用 ChatGPT 订阅，然后选择可用模型"
+    config.provider == "chatgpt" -> requestDestinationError(config)
     config.apiKey.isBlank() -> "请先填写 API Key"
     config.model.isBlank() -> "请填写模型名称"
     else -> requestDestinationError(config)
@@ -89,6 +92,7 @@ internal fun buildClaudeRequestBody(config: ApiConfig, turns: List<ChatTurn>): J
 }
 
 internal fun imageRequestError(config: ApiConfig, mime: String, base64Length: Int): String? {
+    if (config.provider == "chatgpt") return "ChatGPT 订阅连接首版支持文本、笔记与文本附件，请先移除图片"
     if (mime !in setOf("image/jpeg", "image/png", "image/gif", "image/webp")) return "不支持此图片格式"
     if (config.provider == "anthropic" && config.model != "claude-sonnet-5-5") return "此 Claude 模型的图片能力尚未验证"
     if (config.provider == "openai" && config.model !in setOf("gpt-5.4-mini", "gpt-5.4-mini-2026-03-17", "gpt-4o-mini", "gpt-4o-mini-2024-07-18")) return "此 OpenAI 模型的图片能力尚未验证"

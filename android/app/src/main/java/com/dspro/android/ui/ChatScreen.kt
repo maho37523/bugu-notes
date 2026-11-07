@@ -99,6 +99,9 @@ fun ChatScaffold(
     onConfigureApi: () -> Unit,
     onBack: () -> Unit = {},
     busy: Boolean = false,
+    modelDisplayName: String? = null,
+    chatGptAccountLabel: String = "",
+    onManageUsage: () -> Unit = {},
 ) {
     val c = Dsh.colors
     var quoteSource by remember(sessionId) { mutableStateOf<String?>(null) }
@@ -122,7 +125,7 @@ fun ChatScaffold(
             DshIconButton(Icons.Outlined.MoreHoriz, "对话操作", onMore, size = 44.dp, tint = c.subtle)
         })
         if (!apiConfigured) {
-            ApiBanner(onClick = onConfigureApi)
+            ApiBanner(onClick = onConfigureApi, message = if (provider == "chatgpt") "尚未连接可用的 ChatGPT 订阅账号" else "还没有配置 API Key")
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             MessageList(
@@ -146,6 +149,9 @@ fun ChatScaffold(
             onAttach = onAttach,
             model = model,
             provider = provider,
+            modelDisplayName = modelDisplayName,
+            chatGptAccountLabel = chatGptAccountLabel,
+            onManageUsage = onManageUsage,
             onModelSelect = onModelSelect,
             effort = effort,
             onEffortSelect = onEffortSelect,
@@ -586,10 +592,13 @@ private fun Composer(
     onClearQuote: () -> Unit,
     onConfigureApi: () -> Unit,
     busy: Boolean,
+    modelDisplayName: String? = null,
+    chatGptAccountLabel: String = "",
+    onManageUsage: () -> Unit = {},
 ) {
     val c = Dsh.colors
     val keyboard = LocalSoftwareKeyboardController.current
-    val modelLabel = when (model) {
+    val modelLabel = modelDisplayName?.takeIf { it.isNotBlank() } ?: when (model) {
         "deepseek-flash" -> "DeepSeek-V4.1-Flash"
         "deepseek-v4-pro" -> "DeepSeek-V4-Pro"
         else -> model
@@ -604,6 +613,13 @@ private fun Composer(
             shadowElevation = 3.dp,
         ) {
             Column(Modifier.padding(9.dp)) {
+                if (provider == "chatgpt") Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("使用 ChatGPT 订阅", color = c.accent, fontSize = 11.sp)
+                        if (chatGptAccountLabel.isNotBlank()) Text(chatGptAccountLabel, color = c.muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    TextButton(onClick = onManageUsage) { Text("管理用量", fontSize = 11.sp) }
+                }
                 if (attachment != null) {
                     Row(Modifier.padding(start = 3.dp, bottom = 6.dp)) {
                         DshPill(
@@ -685,7 +701,7 @@ private fun Composer(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Text(if (provider == "deepseek") "DeepSeek · $modelLabel · ${effort.label}" else "${when (provider) { "openai" -> "OpenAI"; "anthropic" -> "Claude"; "aliyun" -> "阿里云百炼"; else -> "自定义" }} · $modelLabel", color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (provider == "deepseek") "DeepSeek · $modelLabel · ${effort.label}" else "${when (provider) { "openai" -> "OpenAI"; "chatgpt" -> "ChatGPT"; "anthropic" -> "Claude"; "aliyun" -> "阿里云百炼"; else -> "自定义" }} · $modelLabel", color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Icon(Icons.Outlined.ExpandMore, null, Modifier.size(12.dp), tint = c.subtle)
                         }
                         DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
@@ -739,7 +755,7 @@ private fun Composer(
 }
 
 @Composable
-private fun ApiBanner(onClick: () -> Unit) {
+private fun ApiBanner(onClick: () -> Unit, message: String = "还没有配置 API Key") {
     val c = Dsh.colors
     Row(
         Modifier
@@ -751,7 +767,7 @@ private fun ApiBanner(onClick: () -> Unit) {
     ) {
         Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp), tint = c.accent)
         Spacer(Modifier.width(7.dp))
-        Text("还没有配置 API Key", color = c.accent, fontSize = 10.5.sp, modifier = Modifier.weight(1f))
+        Text(message, color = c.accent, fontSize = 10.5.sp, modifier = Modifier.weight(1f))
         Text("打开设置", color = c.accent, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
     }
 }

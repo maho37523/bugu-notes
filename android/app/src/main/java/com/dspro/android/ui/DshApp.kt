@@ -115,7 +115,11 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
     val memoryRepository = appContainer.memoryRepository
     val workspaceSearchService = appContainer.workspaceSearchService
     val notesViewModel: NotesViewModel = viewModel()
-    var apiConfig by remember { mutableStateOf(configStore.load()) }
+    var apiConfig by remember { mutableStateOf(appContainer.loadConfig()) }
+    val chatGptState by appContainer.chatGptAccounts.state.collectAsStateWithLifecycle()
+    LaunchedEffect(chatGptState) {
+        if (apiConfig.provider == "chatgpt") apiConfig = appContainer.loadConfig("chatgpt")
+    }
 
     var editingNoteId by remember { mutableStateOf<String?>(null) }
     var newNoteDraft by remember { mutableStateOf<com.dspro.android.data.notes.NoteEntity?>(null) }
@@ -846,10 +850,11 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
     }
 
     fun credentialStillAvailable(config: ApiConfig): Boolean {
-        val stored = configStore.load(config.provider)
-        if (!stored.secureStorageAvailable || stored.apiKey != config.apiKey) {
+        val stored = appContainer.loadConfig(config.provider)
+        if (!stored.secureStorageAvailable || stored.apiKey != config.apiKey ||
+            (config.provider == "chatgpt" && (!stored.isConfigured || stored.chatGptAccountId != config.chatGptAccountId))) {
             apiConfig = stored
-            toast("安全存储不可用或配置已更改，请重新确认 API 设置")
+            toast("安全存储不可用或连接已更改，请重新确认连接设置")
             return false
         }
         return true
@@ -886,9 +891,9 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
         }
         if (text.isEmpty() && pendingAttachment == null && pendingNotes.isEmpty()) return
         if (!apiConfig.isConfigured) {
-            toast(if (apiConfig.secureStorageAvailable) "请先配置 API Key" else "安全存储不可用，请检查设备后重新配置")
+            toast(if (!apiConfig.secureStorageAvailable) "安全存储不可用，请检查设备后重新配置" else if (apiConfig.provider == "chatgpt") "请先登录并授权 ChatGPT，然后选择可用模型" else "请先配置 API Key")
             settingsBack = Screen.Chat
-            screen = Screen.Settings
+            screen = if (apiConfig.provider == "chatgpt") Screen.Api else Screen.Settings
             return
         }
         val requestConfig = apiConfig
@@ -1047,9 +1052,9 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
     fun regenerate(msg: ChatMessage) {
         if (!chatLoaded || workspaceBusy || activeId == 0L || isStreaming) return
         if (!apiConfig.isConfigured) {
-            toast(if (apiConfig.secureStorageAvailable) "请先配置 API Key" else "安全存储不可用，请检查设备后重新配置")
+            toast(if (!apiConfig.secureStorageAvailable) "安全存储不可用，请检查设备后重新配置" else if (apiConfig.provider == "chatgpt") "请先登录并授权 ChatGPT，然后选择可用模型" else "请先配置 API Key")
             settingsBack = Screen.Chat
-            screen = Screen.Settings
+            screen = if (apiConfig.provider == "chatgpt") Screen.Api else Screen.Settings
             return
         }
         val requestConfig = apiConfig
@@ -1378,19 +1383,20 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                             onArchived = { librarySection = LibrarySection.Archive; screen = Screen.Library },
                             onTrash = { librarySection = LibrarySection.Trash; screen = Screen.Library },
                             versionName = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "未知版本",
-                            privacyDisclosure = if (apiConfig.isConfigured) "请求会发送至 ${apiConfig.baseUrl.removePrefix("https://").removePrefix("http://")}；本地资料保存在设备上" else "笔记和对话保存在设备上；配置 API 后，请求内容会发送至所配置服务",
+                            privacyDisclosure = if (apiConfig.provider == "chatgpt") "使用所选账号的 ChatGPT 订阅；请求及引用资料会发送至 OpenAI，本地笔记和对话保存在设备上" else if (apiConfig.isConfigured) "请求会发送至 ${apiConfig.baseUrl.removePrefix("https://").removePrefix("http://")}；本地资料保存在设备上" else "笔记和对话保存在设备上；配置 API 后，请求内容会发送至所配置服务",
                             onBack = { screen = settingsBack },
                             onMenu = null,
                         )
                         screen == Screen.Api -> ApiSettingsScreen(
                             config = apiConfig,
                             clientFactory = appContainer::chatClient,
+                            chatGptAccounts = appContainer.chatGptAccounts,
                             onSave = { cfg ->
                                 if (configStore.save(cfg)) {
-                                    apiConfig = cfg
+                                    apiConfig = appContainer.loadConfig(cfg.provider)
                                     confirmedConnection = null
                                     screen = Screen.Settings
-                                    toast("API 配置已保存")
+                                    toast("连接设置已保存")
                                 } else {
                                     apiConfig = apiConfig.copy(apiKey = "", secureStorageAvailable = false)
                                     toast("安全存储不可用，API 配置未保存")
@@ -1407,7 +1413,7 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                                     toast("Key 清除可能未完成，请检查安全存储")
                                 }
                             },
-                            onProviderChange = { configStore.load(it) },
+                            onProviderChange = { appContainer.loadConfig(it) },
                             onBack = { screen = Screen.Settings },
                             onMenu = null,
                         )
@@ -1514,7 +1520,7 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                             } },
                             isStreaming = isStreaming,
                             onSend = {
-                                val key = "${apiConfig.provider}|${apiConfig.baseUrl}|${apiConfig.model}"
+                                val key = "${apiConfig.provider}|${apiConfig.baseUrl}|${apiConfig.model}|${apiConfig.chatGptAccountId}"
                                 if (!apiConfig.isConfigured || confirmedConnection == (activeId to key)) send()
                                 else {
                                     confirmationConfig = apiConfig
@@ -1587,6 +1593,12 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                             onMore = { if (activeId != 0L && !validatingNoteDraft && !workspaceBusy && !backupBusy) sheet = DshSheet.More },
                             model = apiConfig.model,
                             provider = apiConfig.provider,
+                            modelDisplayName = apiConfig.displayModel,
+                            chatGptAccountLabel = apiConfig.chatGptAccountLabel,
+                            onManageUsage = {
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/settings/usage"))) }
+                                    .onFailure { toast("无法打开用量管理，请启用系统浏览器") }
+                            },
                             onModelSelect = { id ->
                                 val updated = apiConfig.copy(model = id)
                                 if (configStore.save(updated)) apiConfig = updated
@@ -1719,7 +1731,7 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
         AlertDialog(
             onDismissRequest = { pendingSendConfirmation = false; pendingRetryConfirmation = null },
             title = { Text(if (retry != null) "使用当前连接重新生成" else "确认发送资料") },
-            text = { Text("服务商：${pendingConfig?.provider.orEmpty()}\n模型：${pendingConfig?.model.orEmpty()}\n发送至：${pendingConfig?.baseUrl.orEmpty()}\n\n会发送此对话的相关历史、引用资料和项目上下文，并可能产生 API 费用。${if (retry != null) "原回答会保留。" else ""}") },
+            text = { Text("服务商：${pendingConfig?.provider.orEmpty()}\n模型：${pendingConfig?.model.orEmpty()}\n发送至：${pendingConfig?.baseUrl.orEmpty()}\n\n会发送此对话的相关历史、引用资料和项目上下文，${if (pendingConfig?.provider == "chatgpt") "使用所选账号的 ChatGPT 订阅额度，不会自动转用 API Key。账号：${pendingConfig.chatGptAccountLabel}。" else "并可能产生 API 费用。"}${if (retry != null) "原回答会保留。" else ""}") },
             confirmButton = { TextButton(onClick = {
                 pendingSendConfirmation = false
                 pendingRetryConfirmation = null
@@ -1727,7 +1739,7 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                     toast("连接或对话已改变，请重新确认")
                 } else if (retry != null) regenerate(retry)
                 else {
-                    confirmedConnection = activeId to "${apiConfig.provider}|${apiConfig.baseUrl}|${apiConfig.model}"
+                    confirmedConnection = activeId to "${apiConfig.provider}|${apiConfig.baseUrl}|${apiConfig.model}|${apiConfig.chatGptAccountId}"
                     send()
                 }
             }) { Text(if (retry != null) "重新生成" else "发送") } },
@@ -1985,7 +1997,7 @@ private fun DshAppContent(dark: Boolean, onToggleDark: () -> Unit) {
                     }
                     Text("附件：${summary.attachmentCount} 条", color = c.muted, fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text("恢复会完整替换当前笔记、对话、记忆和草稿。API Key 保持不变。", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Text("恢复会完整替换当前笔记、对话、记忆和草稿。连接凭据保持不变。", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             },
             confirmButton = {

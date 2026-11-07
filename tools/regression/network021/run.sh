@@ -31,6 +31,8 @@ mkdir -p "$run_dir/store-classes"
   tools/regression/network021/store_fixture/FakeSecurity.kt \
   android/app/src/main/java/com/dspro/android/data/ApiConfig.kt \
   android/app/src/main/java/com/dspro/android/data/ApiProtocol.kt \
+  android/app/src/main/java/com/dspro/android/data/chatgpt/AndroidChatGptStore.kt \
   tools/regression/network021/store_fixture/StoreTest.kt
 "$java_dir/java" -cp "$run_dir/store-classes:$cp_all" com.dspro.android.data.StoreTestKt
 python3 tools/regression/network021/check_backup_rules.py
+bash tools/regression/chatgpt/run.sh

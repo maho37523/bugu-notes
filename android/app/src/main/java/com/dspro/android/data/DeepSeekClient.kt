@@ -23,13 +23,21 @@ sealed interface StreamEvent {
     data object Done : StreamEvent
 }
 
+interface ChatClient {
+    fun stream(turns: List<ChatTurn>): Flow<StreamEvent>
+}
+
 class DeepSeekClient(
     private val config: ApiConfig,
     private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
-) {
+) : ChatClient {
 
     @OptIn(InternalCoroutinesApi::class)
-    fun stream(turns: List<ChatTurn>): Flow<StreamEvent> = flow {
+    override fun stream(turns: List<ChatTurn>): Flow<StreamEvent> = flow {
+        if (config.provider == "chatgpt") {
+            emit(StreamEvent.Failure("ChatGPT 订阅必须使用专用授权连接"))
+            return@flow
+        }
         requestConfigError(config)?.let {
             emit(StreamEvent.Failure(it))
             return@flow

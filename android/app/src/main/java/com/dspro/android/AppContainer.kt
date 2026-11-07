@@ -3,6 +3,10 @@ package com.dspro.android
 import android.content.Context
 import com.dspro.android.data.ApiConfigStore
 import com.dspro.android.data.ApiConfig
+import com.dspro.android.data.ChatClient
+import com.dspro.android.data.chatgpt.AndroidChatGptStore
+import com.dspro.android.data.chatgpt.ChatGptAccounts
+import com.dspro.android.data.chatgpt.ChatGptClient
 import com.dspro.android.data.DeepSeekClient
 import com.dspro.android.data.notes.ChatRepository
 import com.dspro.android.data.notes.MemoryRepository
@@ -25,5 +29,7 @@ class AppContainer(context: Context) {
     val backupService = BackupService(context.applicationContext, database)
     val markdownImportService = MarkdownImportService(notesRepository)
     val apiConfigStore = ApiConfigStore(context.applicationContext)
-    fun chatClient(config: ApiConfig) = DeepSeekClient(config)
+    val chatGptAccounts = ChatGptAccounts(AndroidChatGptStore(context.applicationContext))
+    fun loadConfig(provider: String? = null) = chatGptAccounts.configuration(apiConfigStore.load(provider))
+    fun chatClient(config: ApiConfig): ChatClient = if (config.provider == "chatgpt") ChatGptClient(chatGptAccounts, config) else DeepSeekClient(config)
 }

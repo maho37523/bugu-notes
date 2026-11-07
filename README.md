@@ -2,9 +2,11 @@
 
 本地优先的 Android 笔记与 AI 对话应用，使用 Kotlin、Jetpack Compose 和 Room。支持 Markdown 笔记、项目与嵌套目录、对话草稿、引用上下文，以及业务备份与恢复。
 
-当前源码：**v0.4.0 / versionCode 15**，包含旧临时草稿目录引用导致启动闪退的兼容修复。Android 15/17 的合成数据新安装、覆盖升级和冷启动验证通过，用户授权的 OPPO Android 17 启动验证通过；不代表全部设备、真实历史数据或在线模型均已验收。详见 [修复记录](docs/exec-plans/T-20261107-v040-startup-crash.md)。
+当前开发分支：**v0.5.0 / versionCode 16 候选**，增加 ChatGPT 官方订阅授权连接。GitHub 的 `main` 仍是已发布源码的 v0.4.0 启动修复版；新功能尚未通过真实账号在线验收。
 
-现有 AI 接入使用用户自行配置的厂商 API 凭据。**ChatGPT 订阅登录尚未实现**，作为后续版本开发；官方路径及限制见 [研究记录](docs/exec-plans/T-20261107-openai-subscription-research.md)。
+ChatGPT 连接使用系统浏览器、PKCE 和官方动态公共客户端注册，账号凭据独立加密保存；模型来自所选账号目录，请求使用官方 Responses 路径和用户授予的订阅权限。它与既有 OpenAI API Key 分开，限额或授权失败不会静默转用付费 API。首版支持文本、引用笔记和文本附件；图片、语音和服务端工具不在当前验证范围。见 [实施记录](docs/exec-plans/T-20261107-chatgpt-login-implementation.md) 和 [官方路径研究](docs/exec-plans/T-20261107-openai-subscription-research.md)。
+
+笔记、项目、目录、对话草稿和备份维持 schema 9；旧草稿失效目录的启动修复仍保留。见 [修复记录](docs/exec-plans/T-20261107-v040-startup-crash.md)。
 
 ## 构建与验证
 

@@ -8,7 +8,7 @@ assert app is not None
 assert app.get(android + 'allowBackup') == 'true'
 assert app.get(android + 'fullBackupContent') == '@xml/backup_rules'
 assert app.get(android + 'dataExtractionRules') == '@xml/data_extraction_rules'
-expected = {'ds_api_secure.xml', 'ds_api_fallback.xml'}
+expected = {'ds_api_secure.xml', 'ds_api_fallback.xml', 'ds_chatgpt_secure.xml'}
 
 def excluded(node):
     return {item.get('path') for item in node.findall('exclude') if item.get('domain') == 'sharedpref'}
