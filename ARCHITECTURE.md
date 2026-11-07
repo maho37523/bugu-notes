@@ -50,3 +50,11 @@ DshApp 同时负责导航、请求、草稿、附件及内容生命周期（审�
 - 应用启动调用 `cleanupTrash(30)`；不能在真实用户数据上把启动当作只读检查。
 - 完整业务备份排除 API 配置，恢复是替换而非合并。见 [ADR-0001](docs/decisions/0001-backup-excludes-api-config.md)。
 - Web 原型不是原生生产能力；真实模型、搜索与设备交互尚无本轮端到端验证。
+
+## v0.5.0 分支中的订阅认证边界
+
+仍是单模块与手工 AppContainer 组装。小型 `ChatClient` 接口承接既有 DeepSeekClient 和新增 ChatGptClient；根 UI 继续固定请求配置快照。ChatGPT 配置仅保存所选注册 ID 等非令牌设置，实际凭据由独立 `ds_chatgpt_secure` 加密偏好保存并排除系统备份/设备迁移，不进入 Room 或业务 ZIP。
+
+`data/chatgpt` 负责一次性 loopback/PKCE/state/nonce、官方 JWKS/RS256、账号与注册绑定、原子令牌更新、退出撤销，以及固定官方 Responses 请求和终态解码。系统浏览器授权中的可选 id_token_hint 在 Android 端省略，避免令牌进入 Intent URL 日志；返回账号仍须与所选注册绑定一致。模型列表按账号读取，订阅失败不自动路由到 API Key。没有新增后端、模型 SDK、数据库迁移或架构框架；在线与移动端生命周期的实际覆盖见 [任务](docs/exec-plans/T-20261107-chatgpt-login-implementation.md)。
+
+0.5.1 使用共享小型模型能力规则服务聊天框和协议编码；公开目录保留可选 supported_reasoning_levels，缺失字段兼容旧加密注册记录。思考偏好按 provider/model/ChatGPT registration 分开保存，不进入 Room；Chat Completions、Claude output_config 和 Responses reasoning 各按对应协议编码。

@@ -96,3 +96,9 @@ R02 已实际复现 `test_room_migration_v6.py` 的重复列失败，修复重�
 本轮 Android 15 / 4 KB 与 Android 17 / 16 KB 实际运行均通过；基线 `.engineering/reports/20261107-123141-568382/summary.json`、设备报告 `.engineering/reports/startup35-final/summary.json` 和 `.engineering/reports/startup17-final/summary.json`。原包和重建包哈希相同，用户真机闪退未复现，不能据此称已修复；OPPO、真实旧库、IME、在线与全部历史升级链仍未确认。
 
 后续 USB 真机日志已将启动故障定位到旧临时草稿悬空 folderId。修复仅限 SQL 8→9 读取，新增原包失败/修复通过的 Android 17 及 JDBC 负例，完整基线 `.engineering/reports/20261107-125956-652818/summary.json` 通过；Android 15/17 `startup35-dangling-fixed` / `startup17-dangling-fixed` 通过。用户明确批准后，备份并校验现有 APK/数据库/附件，再在 OPPO Android 17 覆盖修复包，进程、前台 Activity 和新增异常检查通过。该后续证据取代前段“真机根因未确认”的历史状态，不取代用户实际内容和完整体验验收。详见 [启动修复任务](exec-plans/T-20261107-v040-startup-crash.md)。
+
+## v0.5.0 订阅连接验证补充
+
+baseline 构建增加 `:app:assembleDebugAndroidTest`，编译自定义 Android 框架 Instrumentation 测试包，无新增 JUnit 或其他依赖。该测试包只用于专用合成 AVD，不随用户主 APK 打包，也不安装到真实手机；框架运行器和外部脚本同时限制虚拟设备/专用 AVD 名称，并拒绝已有账号凭据。
+
+network021 现在调用 `tools/regression/chatgpt/run.sh`：实际临时 RSA 签名、授权回调/PKCE/state/nonce、账号隔离/模型目录、令牌刷新并发与取消、退出/存储失败、官方主机和 Responses 终态等均用合成 fixture，不发真实模型请求。Android 运行检查另用 `tools/regression/chatgpt/android_callback.py`：生产 loopback、Android JCA 和真实 EncryptedSharedPreferences 隔离，测试后清除合成凭据。完整命令和限制见 [回归说明](../tools/regression/README.md)。真实浏览器登录、套餐资格及在线推理不能用这些结果替代。

@@ -14,8 +14,9 @@ android {
         applicationId = "com.dspro.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.4.0"
+        versionCode = 17
+        versionName = "0.5.1"
+        testInstrumentationRunner = "com.dspro.android.testing.ChatGptInstrumentation"
     }
 
     buildTypes {

@@ -93,3 +93,7 @@
 - 检查范围内未发现真实数据库文件、正式签名文件、独立设计源文件或后端部署配置；它们是否存在于其他位置未确认。
 - v0.2.1 APK 校验及签名历史记录引用 [发布记录](15-bugu-notes-v0.2.1-release.md)，当前核对程度见 [current-state](current-state.md)。
 - 工程新文档入口见 [AGENTS](../AGENTS.md)、[架构](../ARCHITECTURE.md)、[产品](product.md)、[质量](quality.md)、[决策](decisions/README.md)、[执行计划](exec-plans/000-project-reboot.md)。
+
+## v0.5.0 官方登录按钮资产
+
+新增 [OpenAI 官方白色 ChatGPT SVG](../design/vendor/openai/chatgpt-logo-white.svg)，原件不改，来源及使用范围见 [SOURCE](../design/vendor/openai/SOURCE.md)。SHA-256 `568ce2e8701934856aaafc0ed1c3d0300f6c2ff384d0ae743dd1dea08570e12c`。对应 [Android vector](../android/app/src/main/res/drawable/ic_chatgpt_sign_in.xml) 保留 21×21 viewport 和同一路径，只用于官方登录按钮；原有 25 项布谷品牌/设计资产未变。第三方标志不按项目 MIT 重新授权。

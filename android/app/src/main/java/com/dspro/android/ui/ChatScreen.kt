@@ -83,9 +83,8 @@ fun ChatScaffold(
     onMore: () -> Unit,
     model: String,
     provider: String,
-    onModelSelect: (String) -> Unit,
+    onOpenModelPicker: () -> Unit,
     effort: ThinkingEffort,
-    onEffortSelect: (ThinkingEffort) -> Unit,
     attachment: String?,
     onClearAttachment: () -> Unit,
     noteTitles: List<String>,
@@ -99,6 +98,8 @@ fun ChatScaffold(
     onConfigureApi: () -> Unit,
     onBack: () -> Unit = {},
     busy: Boolean = false,
+    modelDisplayName: String? = null,
+    onManageUsage: () -> Unit = {},
 ) {
     val c = Dsh.colors
     var quoteSource by remember(sessionId) { mutableStateOf<String?>(null) }
@@ -122,7 +123,7 @@ fun ChatScaffold(
             DshIconButton(Icons.Outlined.MoreHoriz, "对话操作", onMore, size = 44.dp, tint = c.subtle)
         })
         if (!apiConfigured) {
-            ApiBanner(onClick = onConfigureApi)
+            ApiBanner(onClick = onConfigureApi, message = if (provider == "chatgpt") "尚未连接可用的 ChatGPT 订阅账号" else "还没有配置 API Key")
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             MessageList(
@@ -146,9 +147,10 @@ fun ChatScaffold(
             onAttach = onAttach,
             model = model,
             provider = provider,
-            onModelSelect = onModelSelect,
+            modelDisplayName = modelDisplayName,
+            onManageUsage = onManageUsage,
+            onOpenModelPicker = onOpenModelPicker,
             effort = effort,
-            onEffortSelect = onEffortSelect,
             attachment = attachment,
             onClearAttachment = onClearAttachment,
             noteTitles = noteTitles,
@@ -573,9 +575,8 @@ private fun Composer(
     onAttach: () -> Unit,
     model: String,
     provider: String,
-    onModelSelect: (String) -> Unit,
+    onOpenModelPicker: () -> Unit,
     effort: ThinkingEffort,
-    onEffortSelect: (ThinkingEffort) -> Unit,
     attachment: String?,
     onClearAttachment: () -> Unit,
     noteTitles: List<String>,
@@ -586,15 +587,16 @@ private fun Composer(
     onClearQuote: () -> Unit,
     onConfigureApi: () -> Unit,
     busy: Boolean,
+    modelDisplayName: String? = null,
+    onManageUsage: () -> Unit = {},
 ) {
     val c = Dsh.colors
     val keyboard = LocalSoftwareKeyboardController.current
-    val modelLabel = when (model) {
+    val modelLabel = modelDisplayName?.takeIf { it.isNotBlank() } ?: when (model) {
         "deepseek-flash" -> "DeepSeek-V4.1-Flash"
         "deepseek-v4-pro" -> "DeepSeek-V4-Pro"
         else -> model
     }
-    var modelMenu by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
         Surface(
             modifier = Modifier.widthIn(max = 880.dp).fillMaxWidth(),
@@ -604,6 +606,12 @@ private fun Composer(
             shadowElevation = 3.dp,
         ) {
             Column(Modifier.padding(9.dp)) {
+                if (provider == "chatgpt") Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("使用 ChatGPT 订阅", color = c.accent, fontSize = 11.sp)
+                    }
+                    TextButton(onClick = onManageUsage) { Text("管理用量", fontSize = 11.sp) }
+                }
                 if (attachment != null) {
                     Row(Modifier.padding(start = 3.dp, bottom = 6.dp)) {
                         DshPill(
@@ -675,40 +683,17 @@ private fun Composer(
                     IconButton(onClick = onPickNote, enabled = !busy, modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Outlined.AlternateEmail, "引用笔记", Modifier.size(17.dp), tint = if (noteTitles.isNotEmpty()) c.accent else c.muted)
                     }
-                    Spacer(Modifier.weight(1f))
-                    Box {
+                    Box(Modifier.weight(1f)) {
                         Row(
                             Modifier.heightIn(min = 44.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .clickable(enabled = !busy) { modelMenu = true }
+                                .clickable(enabled = !busy && !isStreaming) { keyboard?.hide(); onOpenModelPicker() }
                                 .padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Text(if (provider == "deepseek") "DeepSeek · $modelLabel · ${effort.label}" else "${when (provider) { "openai" -> "OpenAI"; "anthropic" -> "Claude"; "aliyun" -> "阿里云百炼"; else -> "自定义" }} · $modelLabel", color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${com.dspro.android.data.providerLabel(provider)} · $modelLabel · ${effort.label}", modifier = Modifier.weight(1f), color = c.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Icon(Icons.Outlined.ExpandMore, null, Modifier.size(12.dp), tint = c.subtle)
-                        }
-                        DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
-                            Text("模型", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                            if (provider == "deepseek") listOf(
-                                "deepseek-flash" to "DeepSeek-V4.1-Flash",
-                                "deepseek-v4-pro" to "DeepSeek-V4-Pro",
-                            ).forEach { (id, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(if (model == id) "✓  $label" else label) },
-                                    onClick = { onModelSelect(id) },
-                                )
-                            }
-                            if (provider == "deepseek") {
-                                HorizontalDivider()
-                                Text("思考强度", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                                ThinkingEffort.entries.forEach { level ->
-                                    DropdownMenuItem(
-                                        text = { Text(if (effort == level) "✓  ${level.label}" else level.label) },
-                                        onClick = { onEffortSelect(level); modelMenu = false },
-                                    )
-                                }
-                            } else DropdownMenuItem(text = { Text("更改服务商或模型") }, onClick = { modelMenu = false; onConfigureApi() })
                         }
                     }
                     Spacer(Modifier.width(6.dp))
@@ -739,7 +724,7 @@ private fun Composer(
 }
 
 @Composable
-private fun ApiBanner(onClick: () -> Unit) {
+private fun ApiBanner(onClick: () -> Unit, message: String = "还没有配置 API Key") {
     val c = Dsh.colors
     Row(
         Modifier
@@ -751,7 +736,7 @@ private fun ApiBanner(onClick: () -> Unit) {
     ) {
         Icon(Icons.Outlined.Lock, null, Modifier.size(13.dp), tint = c.accent)
         Spacer(Modifier.width(7.dp))
-        Text("还没有配置 API Key", color = c.accent, fontSize = 10.5.sp, modifier = Modifier.weight(1f))
+        Text(message, color = c.accent, fontSize = 10.5.sp, modifier = Modifier.weight(1f))
         Text("打开设置", color = c.accent, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
     }
 }

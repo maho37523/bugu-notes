@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 object SecurityFixture {
     var failInit = false
     lateinit var prefs: SharedPreferences
+    val byName = mutableMapOf<String, SharedPreferences>()
 }
 class MasterKey {
     enum class KeyScheme { AES256_GCM }
@@ -15,5 +16,5 @@ class MasterKey {
 object EncryptedSharedPreferences {
     enum class PrefKeyEncryptionScheme { AES256_SIV }
     enum class PrefValueEncryptionScheme { AES256_GCM }
-    fun create(context: Context, name: String, key: MasterKey, keyScheme: PrefKeyEncryptionScheme, valueScheme: PrefValueEncryptionScheme): SharedPreferences = SecurityFixture.prefs
+    fun create(context: Context, name: String, key: MasterKey, keyScheme: PrefKeyEncryptionScheme, valueScheme: PrefValueEncryptionScheme): SharedPreferences = SecurityFixture.byName[name] ?: SecurityFixture.prefs
 }

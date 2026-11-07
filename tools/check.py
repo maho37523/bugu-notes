@@ -210,7 +210,7 @@ def baseline(root: Path) -> int:
             if sha256(target) != fingerprint[name]:
                 raise ValueError('Source changed during copy: ' + name)
         commands = [('check_tools', [sys.executable, '-m', 'unittest', 'discover', '-s', 'tools', '-p', 'test_engineering_checks.py']),
-                    ('build', ['./gradlew', '--offline', '--no-daemon', ':app:assembleDebug', ':app:lintDebug']), *SUITES]
+                    ('build', ['./gradlew', '--offline', '--no-daemon', ':app:assembleDebug', ':app:assembleDebugAndroidTest', ':app:lintDebug']), *SUITES]
         build_ok = True
         for name, command in commands:
             if not build_ok:

@@ -82,7 +82,8 @@ fun main() {
             ChatTurn("assistant", "answer A"), ChatTurn("context", "note B"), ChatTurn("user", "question B", "aGVsbG8=", "image/png")),
     )
     check(claudeRequest.optString("system") == "project rules" && claudeRequest.optInt("max_tokens") == 4096)
-    check(claudeRequest.getJSONObject("thinking").optString("type") == "between_tools")
+    check(claudeRequest.getJSONObject("thinking").optString("type") == "adaptive")
+    check(claudeRequest.getJSONObject("output_config").optString("effort") == "high")
     val messages = claudeRequest.getJSONArray("messages")
     check(messages.length() == 3 && messages.getJSONObject(0).optString("role") == "user")
     check(messages.getJSONObject(0).getJSONArray("content").getJSONObject(0).optString("text").contains("note A"))
@@ -185,6 +186,26 @@ fun main() {
     val deepseek = buildChatRequestBody(ApiConfig("ds-secret", "https://api.deepseek.com", "deepseek-flash"), turns)
     check(deepseek.has("thinking") && deepseek.has("reasoning_effort"))
     check(!deepseek.toString().contains("ds-secret") && !generic.toString().contains("openai-secret"))
+
+    for (level in supportedThinkingEfforts("openai", "gpt-5.4-mini")) {
+        val body = buildChatRequestBody(ApiConfig(provider = "openai", model = "gpt-5.4-mini", effort = level), turns)
+        check(if (level == ThinkingEffort.Auto) !body.has("reasoning_effort") else body.optString("reasoning_effort") == level.apiValue)
+    }
+    check(supportedThinkingEfforts("openai", "gpt-4o-mini") == listOf(ThinkingEffort.Auto))
+    check(!buildChatRequestBody(ApiConfig(provider = "custom", model = "unknown", effort = ThinkingEffort.Max), turns).has("reasoning_effort"))
+    check(ThinkingEffort.None !in supportedThinkingEfforts("chatgpt", "gpt-6.1-sol"))
+    check(supportedThinkingEfforts("chatgpt", "new-model", listOf("low", "ultra", "new-future-value")) == listOf(ThinkingEffort.Auto, ThinkingEffort.Low, ThinkingEffort.Ultra))
+    check(supportedThinkingEfforts("chatgpt", "gpt-6.1-sol", emptyList()) == listOf(ThinkingEffort.Auto))
+    for (level in listOf(ThinkingEffort.Low, ThinkingEffort.Medium, ThinkingEffort.High, ThinkingEffort.XHigh, ThinkingEffort.Max)) {
+        val body = buildClaudeRequestBody(ApiConfig(provider = "anthropic", model = "claude-sonnet-5-5", effort = level), turns)
+        check(body.getJSONObject("output_config").optString("effort") == level.apiValue)
+        check(body.getJSONObject("thinking").optString("type") == "adaptive")
+    }
+    val qwen = buildChatRequestBody(ApiConfig(provider = "aliyun", model = "qwen3.8-max", effort = ThinkingEffort.Low), turns)
+    check(qwen.optBoolean("enable_thinking") && qwen.optString("reasoning_effort") == "low" && !qwen.has("thinking_budget"))
+    val noQwenThinking = buildChatRequestBody(ApiConfig(provider = "aliyun", model = "qwen3.8-max", effort = ThinkingEffort.None), turns)
+    check(!noQwenThinking.optBoolean("enable_thinking") && !noQwenThinking.has("reasoning_effort"))
+    println("PASS: composer capability policy maps explicit effort to OpenAI/Claude/Qwen; unknown models omit unsupported fields")
 
     val mixed = parseChatSseChunk("""{"choices":[{"delta":{"reasoning_content":"推理","content":"  正文 "}}]}""")
     check(mixed == listOf(StreamEvent.Reasoning("推理"), StreamEvent.Content("  正文 ")))

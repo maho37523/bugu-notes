@@ -29,7 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dspro.android.data.ApiConfig
 import com.dspro.android.data.ChatTurn
-import com.dspro.android.data.DeepSeekClient
+import com.dspro.android.data.ChatClient
+import com.dspro.android.data.chatgpt.ChatGptAccounts
 import com.dspro.android.data.StreamEvent
 import com.dspro.android.data.normalizedDestination
 import com.dspro.android.data.requestDestinationError
@@ -43,7 +44,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 @Composable
 fun ApiSettingsScreen(
     config: ApiConfig,
-    clientFactory: (ApiConfig) -> DeepSeekClient,
+    clientFactory: (ApiConfig) -> ChatClient,
+    chatGptAccounts: ChatGptAccounts,
     onSave: (ApiConfig) -> Unit,
     onClear: (String) -> Unit,
     onBack: () -> Unit,
@@ -65,6 +67,17 @@ fun ApiSettingsScreen(
     var testing by remember { mutableStateOf(false) }
     var testJob by remember { mutableStateOf<Job?>(null) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    if (provider == "chatgpt") {
+        ChatGptSettingsScreen(chatGptAccounts, config, onSave, onBack, onApiKey = {
+            val selected = onProviderChange("deepseek")
+            provider = "deepseek"; apiKey = selected.apiKey; baseUrl = selected.baseUrl
+            model = selected.model; workspaceId = selected.workspaceId
+            webSearch = selected.webSearchEnabled; storageAvailable = selected.secureStorageAvailable
+            trustDestination = normalizedDestination(selected.baseUrl) != null && normalizedDestination(selected.baseUrl) == normalizedDestination(selected.trustedBaseUrl)
+        })
+        return
+    }
 
     fun draft() = ApiConfig(
         apiKey = apiKey.trim(),
@@ -160,7 +173,7 @@ fun ApiSettingsScreen(
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                     )
                     ExposedDropdownMenu(expanded = providerMenu, onDismissRequest = { providerMenu = false }) {
-                        listOf("deepseek" to "DeepSeek", "openai" to "OpenAI", "anthropic" to "Claude", "aliyun" to "阿里云百炼", "custom" to "OpenAI 兼容自定义").forEach { (id, label) ->
+                        listOf("deepseek" to "DeepSeek", "openai" to "OpenAI API Key", "chatgpt" to "ChatGPT 订阅登录", "anthropic" to "Claude", "aliyun" to "阿里云百炼", "custom" to "OpenAI 兼容自定义").forEach { (id, label) ->
                             DropdownMenuItem(text = { Text(label) }, onClick = {
                                 providerMenu = false
                                 if (provider != id) {

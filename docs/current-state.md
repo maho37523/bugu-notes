@@ -6,7 +6,7 @@
 
 | 项目 | 当前证据 |
 | --- | --- |
-| 版本 | [app/build.gradle.kts](../android/app/build.gradle.kts)：0.4.0 / versionCode 15（开发中，未完成本轮离线/设备验收），applicationId `com.dspro.android`；v0.3.0 / 14 有已完成的离线候选记录，设备及在线仍待验收 |
+| 版本 | [app/build.gradle.kts](../android/app/build.gradle.kts)：0.5.1 / versionCode 17（ChatGPT 订阅登录开发分支候选，在线未验收；公开 main 为 0.4.0 / 15 启动修复版），applicationId `com.dspro.android`；v0.3.0 / 14 有已完成的离线候选记录，设备及在线仍待验收 |
 | 工具链 | [根构建](../android/build.gradle.kts)：AGP 8.7.3、Kotlin/Compose 插件 2.0.21、KSP 2.0.21-1.0.28；[Wrapper](../android/gradle/wrapper/gradle-wrapper.properties)：Gradle 8.9 |
 | SDK / JVM | minSdk 26、compileSdk/targetSdk 35、Build Tools 35.0.1；源码及字节码目标 17，既有构建文档使用 JDK 21 |
 | 存储 | [NotesDatabase](../android/app/src/main/java/com/dspro/android/data/notes/NotesDatabase.kt)：Room 2.6.1、schema 9、13 个实体，迁移 1→9；v0.4.0 schema 8→9 与 v6/7/8 旧备份转换已通过本机离线合成回归，设备/真实数据尚未验证 |
@@ -51,3 +51,9 @@
 | TLS 警告 | 历史 Lint 中有依赖 BouncyCastle 的 TrustAllX509TrustManager 警告；运行时可达性未确认，不能据此认定应用关闭 TLS 校验 |
 
 真实用户数据位置与规模、原 Git 来源、正式签名与发布渠道、字体以外视觉资产的授权来源、线上模型兼容性仍未确认。Codex 负责技术查证与隔离验证；用户只需补充无法从工程确认的来源信息、授权范围和产品取舍。未读取真实凭据或本机配置内容。
+
+## v0.5.0 开发分支补充
+
+用户确认 MIT 并授权先公开 v0.4.0、再开发订阅登录。公开 main 基准 `71d1afe`；`codex/chatgpt-subscription-login` 新增系统浏览器/loopback/PKCE、RS256 身份验证、独立加密账号存储、串行刷新/退出和 Responses 路由，账号目录提供模型。最终固定输入完整构建/Lint、全部离线回归与 Android15/17 的启动、升级、本地回调/平台验签/加密存储测试通过；获准后已私有备份并覆盖安装真机；用户完成0.5.0登录并报告模型可用。随后0.5.1同功能迭代备份/安装及前台启动通过，进程存活、无新增崩溃、APK 哈希一致。真实 ChatGPT 账号、地区/workspace 资格和在线推理仍未验证。与现有 API Key/其他厂商隔离，不改 schema、迁移或业务备份格式；具体进度以 [实施任务](exec-plans/T-20261107-chatgpt-login-implementation.md) 为准。
+
+0.5.1 候选统一聊天框的已配置连接、模型与思考强度选择，按官方/目录能力映射实际参数并分别保存，隐藏聊天框邮箱；本机回调页面解释127.0.0.1及返回应用。用户已报告0.5.0真实登录可用，新候选实际结果见 [聊天选择任务](exec-plans/T-20261107-chat-controls.md)。

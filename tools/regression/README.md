@@ -28,3 +28,15 @@ python3 tools/regression/android_startup.py --adb /Users/cris/Library/Android/sd
 报告保存 APK 哈希、Android/API/页大小、启动结果、崩溃缓冲、UI XML、截图与合成资料断言。该检查独立于 `baseline`，不会在离线入口自动启动模拟器；模拟器工具及系统镜像需已具备或单独获准下载。本机模拟器通过不能证明真实 OPPO、真实历史数据、中文 IME 或在线 API 通过。
 
 启动回归可加 `--dangling-draft-folder`，在 schema 8 专用合成库创建全局/项目/孤立项目草稿的已删除目录引用，覆盖此次真机异常。验证升级成功、引用变 null、草稿正文/引用/附件 JSON 与附件文件保留；非当前项目时间戳逐值保留。全局当前草稿有既有启动自动保存行为，不把其 updatedAt 更新误判为迁移篡改；纯迁移全部字段与时间戳由 lifecycle019 精确比较。严格 ZIP/v9 校验及异常事务回滚仍保留。
+
+## ChatGPT 订阅与 Android 回调
+
+`bash tools/regression/chatgpt/run.sh` 从当前同源编译类及生产源码执行纯 JVM 回归，已纳入 network021。测试使用运行时生成的临时 RSA 密钥和合成令牌、实际本机 loopback HTTP，不请求真实 OpenAI 服务。另有存储 fixture 验证新偏好文件与旧 API 配置隔离、写入失败原子性和损坏/Keystore 故障闭锁；这类替身不声称完成真实设备加密验证。
+
+实际 Android 回调和加密存储检查使用框架自定义 Instrumentation，无额外依赖。先在同源隔离副本构建 `:app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug`，仅在已安装该主 APK 的可丢弃 `BuguSmoke*` AVD 上运行：
+
+```sh
+python3 tools/regression/chatgpt/android_callback.py --adb /Users/cris/Library/Android/sdk/platform-tools/adb --serial emulator-5582 --avd BuguSmoke17 --test-apk /absolute/app-debug-androidTest.apk --report /absolute/new-report
+```
+
+脚本核对 emulator 序号、AVD 名称及 qemu 属性，运行器核对 ranchu/goldfish 和合成标记；只写随机合成凭据，拒绝已有账号，验证密文文件不含合成令牌明文并恢复空账号状态。报告不输出凭据。它不打开真实 OAuth，不读取本机 Codex 登录，也不发推理。Android 17 默认 `am instrument -w` 会只输出 stream 文本，脚本采用 `-r` 原始结果码；第一轮包装器误报失败的原始 PASS 记录保留，不作为产品失败。
